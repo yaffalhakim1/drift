@@ -1,0 +1,1508 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>drift, a record player for your Windows system tray</title>
+<meta name="description" content="drift plays one long mix from your own disk and cuts it into 28 chapters, so the title follows the music. A 3.4 MB Windows tray app with no browser engine inside. Free, MIT licensed.">
+<link rel="canonical" href="https://yaffalhakim1.github.io/drift/">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="drift, a record player for your Windows system tray">
+<meta property="og:description" content="One long mix from your own disk, cut into 28 chapters. Close the popup and the music keeps going.">
+<meta property="og:url" content="https://yaffalhakim1.github.io/drift/">
+<meta property="og:image" content="https://yaffalhakim1.github.io/drift/screenshots/popup-dark.png">
+<meta property="og:image:alt" content="The drift popup: a turning record with a cream label, the chapter title Owls of the Night by Kupla, a seek bar, and the chapter list below.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://yaffalhakim1.github.io/drift/screenshots/popup-dark.png">
+<meta name="twitter:image:alt" content="The drift popup in dark mode, showing a record and a chapter list.">
+<meta name="theme-color" content="#000000">
+
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20fill='%23000'/%3E%3Ccircle%20cx='16'%20cy='16'%20r='12'%20fill='%23f8f3e8'/%3E%3Ccircle%20cx='16'%20cy='16'%20r='7.4'%20fill='%23000'/%3E%3Ccircle%20cx='16'%20cy='16'%20r='2'%20fill='%23f8f3e8'/%3E%3C/svg%3E">
+
+<!-- Fonts are served from this repository, not from a font CDN, so reading this
+     page does not hand a visitor's address to a third party. Geist is a
+     variable font: each file covers 100 to 900. -->
+<link rel="preload" href="fonts/geist.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/geist-mono.woff2" as="font" type="font/woff2" crossorigin>
+
+<!-- Script swaps this class for "js" before the stylesheet paints. The
+     reveal styles hang off ".js", so content is only ever hidden when a
+     script exists to show it again. -->
+<script>document.documentElement.className = "js";</script>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "drift",
+  "applicationCategory": "MultimediaApplication",
+  "operatingSystem": "Windows 10, Windows 11",
+  "description": "A mix player for the Windows system tray. It streams one recording from disk and marks 28 chapters along it.",
+  "url": "https://yaffalhakim1.github.io/drift/",
+  "downloadUrl": "https://github.com/yaffalhakim1/drift/releases/download/v0.1.0/drift-setup-0.1.0-amd64.exe",
+  "softwareVersion": "0.1.0",
+  "fileSize": "3.4MB",
+  "license": "https://opensource.org/license/mit",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}
+</script>
+
+<style>
+/* drift, landing page
+   Tokens only. Colour is sampled from the shipped popup, so the page and the
+   product cannot drift apart. Motion uses one curve. */
+
+/* Two faces, both variable, both served from this repository. */
+@font-face {
+  font-family: "Geist";
+  src: url("fonts/geist.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("fonts/geist-mono.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: dark;
+
+  /* surface, from the design system's dark set */
+  --bg: #000000;
+  --surface: #181818;
+  --surface-2: #1f1f1f;
+  --line: #272727;
+
+  /* text. Ratios measured with the WCAG 2.x formula, on the surface each
+     colour is actually used against. */
+  --text: #ffffff;
+  --muted: #a6a6a6;      /* 8.6:1 on #000, 7.3:1 on #181818 */
+  --dim: #8c8c8c;        /* 6.3:1 on #000, 5.3:1 on #181818 */
+
+  /* accent: the app's Apple system blue for dark. 5.8:1 on #000 */
+  --accent: #0a84ff;
+
+  /* the play key: the brightest object in the product, 16.7:1 with its ink */
+  --key-top: #f8f3e8;
+  --key-ink: #14140f;
+
+  /* spacing, the scale's own values */
+  --s-25: 2px;
+  --s-50: 4px;
+  --s-75: 8px;
+  --s-100: 12px;
+  --s-200: 16px;
+  --s-300: 24px;
+  --s-400: 32px;
+  --s-500: 40px;
+  --s-600: 48px;
+  --s-700: 64px;
+  --s-800: 80px;
+  --s-900: 96px;
+
+  /* one curve for all motion, including the mobile panel */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --radius: 16px;
+  --mono: "Geist Mono", ui-monospace, "Cascadia Mono", monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/* `hidden` must win over the display rule the mobile block sets, or the panel
+   sits over the page for every phone visitor */
+[hidden] { display: none !important; }
+
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
+/* a fixed bar sits over the top of the page, so an anchor must stop short of it */
+section[id], main[id] { scroll-margin-top: 96px; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 24px;
+  letter-spacing: -0.011em;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
+}
+
+img { max-width: 100%; display: block; }
+
+a { color: inherit; }
+
+/* ---------- text styles, used by name ---------- */
+
+.heading-1 { font-size: 60px; line-height: 60px; font-weight: 600; letter-spacing: -0.035em; margin: 0; }
+.heading-2 { font-size: 48px; line-height: 48px; font-weight: 600; letter-spacing: -0.03em; margin: 0; }
+.heading-5 { font-size: 24px; line-height: 32px; font-weight: 600; letter-spacing: -0.017em; margin: 0; }
+
+.title-3 { font-size: 16px; line-height: 24px; font-weight: 500; letter-spacing: -0.01em; margin: 0; }
+
+/* mono is the second face, kept for figures, labels and keys only */
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; letter-spacing: 0; }
+
+/* ---------- layout ---------- */
+
+.wrap {
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 var(--s-300);
+}
+
+section { position: relative; }
+
+/* ---------- skip link ---------- */
+
+.skip {
+  position: fixed;
+  top: var(--s-100);
+  left: var(--s-100);
+  z-index: 100;
+  padding: var(--s-75) var(--s-100);
+  background: var(--key-top);
+  color: var(--key-ink);
+  border-radius: var(--s-75);
+  font-size: 14px;
+  font-weight: 600;
+  transform: translateY(-200%);
+  transition: transform 200ms var(--ease);
+}
+.skip:focus { transform: translateY(0); }
+
+/* ---------- navigation ---------- */
+
+.nav-shell {
+  position: fixed;
+  top: var(--s-200);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  justify-content: center;
+  padding: 0 var(--s-200);
+  pointer-events: none;
+}
+
+.nav {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--s-300);
+  height: 52px;
+  padding: 0 var(--s-75) 0 var(--s-300);
+  border-radius: 999px;
+  background: rgba(24, 24, 24, 0.72);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 12px 32px -14px rgba(0, 0, 0, 0.9);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--s-75);
+  text-decoration: none;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.brand-mark {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--key-top);
+  position: relative;
+  flex: none;
+}
+.brand-mark::after {
+  content: "";
+  position: absolute;
+  inset: 5.5px;
+  border-radius: 50%;
+  background: #000;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: var(--s-300);
+  list-style: none;
+  margin: 0;  padding: 0;
+}
+
+.nav-links a {
+  text-decoration: none;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  padding: var(--s-50) 0;
+  position: relative;
+  transition: color 300ms var(--ease);
+}
+.nav-links a::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 300ms var(--ease);
+}
+@media (hover: hover) and (pointer: fine) {
+  .nav-links a:hover { color: var(--text); }
+  .nav-links a:hover::after { transform: scaleX(1); }
+}
+
+.nav-toggle {
+  display: none;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  border-radius: var(--s-100);
+  position: relative;
+  color: var(--text);
+  -webkit-tap-highlight-color: transparent;
+}
+.nav-toggle span {
+  position: absolute;
+  left: 9px;
+  width: 18px;
+  height: 1.5px;
+  background: currentColor;
+  border-radius: 1px;
+  transition: transform 400ms var(--ease), opacity 200ms var(--ease);
+}
+.nav-toggle span:nth-child(1) { top: 14px; }
+.nav-toggle span:nth-child(2) { top: 20px; }
+
+.nav-toggle[aria-expanded="true"] span:nth-child(1) { transform: translateY(3px) rotate(45deg); }
+.nav-toggle[aria-expanded="true"] span:nth-child(2) { transform: translateY(-3px) rotate(-45deg); }
+
+/* full height panel, not a dropdown */
+.menu-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--s-100);
+  padding: var(--s-700) var(--s-300);
+  background: rgba(8, 8, 8, 0.94);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  opacity: 0;
+  transition: opacity 300ms var(--ease);
+}
+.menu-panel[data-open="true"] { opacity: 1; }
+
+.menu-panel a {
+  text-decoration: none;
+  color: var(--text);
+  font-size: 30px;
+  line-height: 36px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  padding: var(--s-75) 0;
+  border-bottom: 1px solid var(--line);
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 400ms var(--ease), transform 400ms var(--ease);
+}
+.menu-panel[data-open="true"] a { opacity: 1; transform: translateY(0); }
+.menu-panel[data-open="true"] a:nth-child(1) { transition-delay: 0ms; }
+.menu-panel[data-open="true"] a:nth-child(2) { transition-delay: 60ms; }
+.menu-panel[data-open="true"] a:nth-child(3) { transition-delay: 120ms; }
+.menu-panel[data-open="true"] a:nth-child(4) { transition-delay: 180ms; }
+
+/* ---------- buttons ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-75);
+  padding: var(--s-75) var(--s-100);
+  border-radius: 999px;
+  border: 1px solid transparent;
+  text-decoration: none;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 160ms var(--ease), background-color 300ms var(--ease),
+              border-color 300ms var(--ease), color 300ms var(--ease);
+}
+
+.btn-key {
+  background: var(--key-top);
+  color: var(--key-ink);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.85) inset, 0 6px 18px -10px rgba(0, 0, 0, 0.9);
+}
+.btn-key:active { transform: scale(0.97); }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text);
+  /* 3.1 to 1 on black, so the button edge is visible to a low-vision reader;
+     #313131 measured 1.6 and disappeared */
+  border-color: #5a5a5a;
+}
+.btn-ghost:active { transform: scale(0.97); }
+
+@media (hover: hover) and (pointer: fine) {
+  .btn-key:hover { background: #ffffff; }
+  /* the border brightens rather than dims on hover, so the 3:1 edge holds */
+  .btn-ghost:hover { background: var(--surface-2); border-color: #7a7a7a; }
+}
+
+/* the ring follows whatever radius the element already has; changing the
+   radius here would make a chip visibly snap corners while focused */
+.btn:focus-visible,
+.nav-toggle:focus-visible,
+a:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.btn-lg {
+  padding: var(--s-100) var(--s-200);
+  font-size: 16px;
+  line-height: 24px;
+}
+
+/* ---------- hero ---------- */
+
+.hero { padding-top: 148px; padding-bottom: var(--s-900); }
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: var(--s-800);
+  align-items: center;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-75);
+  padding: var(--s-50) var(--s-100) var(--s-50) var(--s-75);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  margin: 0 0 var(--s-300);
+}
+.badge i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: block;
+  margin-left: var(--s-25);
+}
+
+.hero h1 {
+  max-width: 680px;
+  /* the one gradient on the page, and it is on type. The plain colour is the
+     fallback: a clip that fails must not leave an invisible headline. */
+  color: #ffffff;
+  text-wrap: balance;
+}
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .hero h1 {
+    background: linear-gradient(90deg, #ffffff 0%, #9b9b9b 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  /* forced colours drop the gradient, which would leave transparent text */
+  @media (forced-colors: active) {
+    .hero h1 {
+      background: none;
+      -webkit-text-fill-color: currentColor;
+    }
+  }
+}
+
+.hero-sub {
+  max-width: 680px;
+  margin: var(--s-300) 0 0;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 28px;
+  font-weight: 400;
+  text-wrap: pretty;
+}
+
+.cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-100);
+  margin-top: var(--s-400);
+}
+
+/* the dot separator is drawn by the item that follows it, so a wrap puts the
+   dot at the start of the new line instead of stranding it at the end of the
+   old one */
+.proof {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-50) var(--s-100);
+  margin-top: var(--s-300);
+  color: var(--dim);
+  font-size: 12px;
+  line-height: 16px;
+}
+.proof span { display: inline-flex; align-items: center; gap: var(--s-100); }
+.proof span + span::before {
+  content: "";
+  flex: none;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #5c5c5c;
+}
+@media (max-width: 480px) {
+  /* at phone width the dots cost more than they explain */
+  .proof span + span::before { display: none; }
+  .proof { gap: var(--s-50) var(--s-200); }
+}
+
+/* the popup, at its real width, on the surface it actually floats over */
+.popup {
+  position: relative;
+  width: 320px;
+  margin: 0 auto;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 2px 6px rgba(0, 0, 0, 0.6),
+    0 40px 80px -40px rgba(0, 0, 0, 1);
+}
+.popup img { width: 320px; height: auto; }
+
+.popup-caption {
+  margin: var(--s-200) 0 0;
+  text-align: center;
+  color: var(--dim);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* The hero enters once, in reading order. These are transitions, not a
+   keyframe with fill both: a keyframe that never advances would leave the
+   headline invisible. Here the hidden state only exists while script is
+   running, and script always ends by showing the final state. */
+.js .rise {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 700ms var(--ease), transform 700ms var(--ease);
+}
+.js .rise.in { opacity: 1; transform: translateY(0); }
+
+.js .rise-1 { transition-delay: 40ms; }
+.js .rise-2 { transition-delay: 100ms; }
+.js .rise-3 { transition-delay: 160ms; }
+.js .rise-4 { transition-delay: 220ms; }
+.js .rise-5 { transition-delay: 280ms; }
+
+/* ---------- figures ---------- */
+
+.figures {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: var(--s-700) 0;
+}
+
+.figure-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--s-400);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.figure-grid li { display: flex; flex-direction: column; gap: var(--s-75); }
+
+.figure-value {
+  font-family: var(--mono);
+  font-size: 36px;
+  line-height: 40px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+/* the unit sits on the same line as the figure, one space away; a bare margin
+   glued "28" to "chapters" and read as a typo */
+.figure-value small {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 400;
+  color: var(--dim);
+  margin-left: var(--s-75);
+  letter-spacing: 0;
+}
+.figure-label { color: var(--muted); font-size: 14px; line-height: 20px; }
+
+/* ---------- section head ---------- */
+
+.section { padding: var(--s-900) 0; }
+
+.section-head { max-width: 680px; margin-bottom: var(--s-700); }
+.section-head h2 { text-wrap: balance; }
+.section-head p {
+  margin: var(--s-200) 0 0;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 28px;
+  text-wrap: pretty;
+}
+
+/* a list, not a card grid: index, the claim, then the evidence beside it.
+   The top rule closes the list against the section head. */
+.benefits { border-top: 1px solid var(--line); }
+
+.benefit {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: var(--s-400);
+  padding: var(--s-500) 0;
+  border-bottom: 1px solid var(--line);
+  align-items: start;
+}
+
+.benefit-index {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dim);
+  padding-top: 6px;
+}
+
+.benefit h3 { text-wrap: balance; }
+.benefit p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 24px;
+  text-wrap: pretty;
+}
+
+/* ---------- steps ---------- */
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s-400);
+  counter-reset: step;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-200);
+  padding-top: var(--s-300);
+  border-top: 1px solid #313131;
+  position: relative;
+}
+.step::before {
+  counter-increment: step;
+  content: counter(step);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--accent);
+}
+.step p { color: var(--muted); font-size: 16px; line-height: 24px; margin: 0; text-wrap: pretty; }
+
+/* ---------- tagline reveal ---------- */
+
+.tagline {
+  padding: var(--s-900) 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.tagline-text {
+  max-width: 680px;
+  font-size: 36px;
+  line-height: 40px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+  margin: 0;
+}
+
+/* each word carries its own state, so the line fills in reading order.
+   The resting tone is 50 percent white, not 32: at 32 the untriggered words
+   sit at 2.6 to 1, under the 4.5 to 1 floor for text. Half white measures
+   5.3 to 1, so a word that is still waiting is dim but readable.
+   Without script every word stays at full colour. */
+.tagline-text .w {
+  color: var(--text);
+  transition: color 600ms var(--ease);
+}
+.js .tagline-text .w { color: rgba(255, 255, 255, 0.5); }
+.js .tagline-text .w.on { color: var(--text); }
+
+/* ---------- appearance ---------- */
+
+.looks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-400);
+}
+
+.look { margin: 0; }
+.look .popup { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 30px 60px -34px rgba(0, 0, 0, 0.95); }
+.look figcaption {
+  margin-top: var(--s-200);
+  text-align: center;
+  color: var(--dim);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.notes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s-400);
+  margin-top: var(--s-700);
+  padding-top: var(--s-500);
+  border-top: 1px solid var(--line);
+}
+.note h3 { margin-bottom: var(--s-75); }
+.note p { margin: 0; color: var(--muted); font-size: 14px; line-height: 20px; text-wrap: pretty; }
+
+/* ---------- what it does not do ---------- */
+
+.nots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-400) var(--s-700); }
+
+.not {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: var(--s-200);
+  padding-bottom: var(--s-300);
+  border-bottom: 1px solid var(--line);
+}
+.not-mark {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid #313131;
+  display: grid;
+  place-items: center;
+  margin-top: 2px;
+}
+.not-mark::after { content: ""; width: 7px; height: 1px; background: var(--dim); }
+
+/* forced colours drop the drawn minus, so the ring alone carries the mark */
+@media (forced-colors: active) {
+  .not-mark { border-color: CanvasText; }
+  .not-mark::after { background: CanvasText; }
+}
+.not h3 { margin-bottom: var(--s-50); }
+.not p { margin: 0; color: var(--muted); font-size: 14px; line-height: 20px; text-wrap: pretty; }
+
+/* ---------- faq ---------- */
+
+.faq { max-width: 780px; border-top: 1px solid var(--line); }
+
+.faq details {
+  border-bottom: 1px solid var(--line);
+  padding: var(--s-300) 0;
+}
+.faq summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-300);
+  cursor: pointer;
+  list-style: none;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  transition: color 300ms var(--ease);
+}
+.faq summary::-webkit-details-marker { display: none; }
+
+.faq summary::after {
+  content: "";
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-top: 6px;
+  background:
+    linear-gradient(currentColor, currentColor) center / 12px 1.5px no-repeat,
+    linear-gradient(currentColor, currentColor) center / 1.5px 12px no-repeat;
+  color: var(--dim);
+  transition: transform 400ms var(--ease), color 300ms var(--ease);
+}
+.faq details[open] summary::after { transform: rotate(45deg); color: var(--accent); }
+
+/* forced colours drop gradients, so the mark becomes a drawn box: a cross
+   while closed, a single bar while open, the same reading as the plus and
+   the rotated plus it replaces */
+@media (forced-colors: active) {
+  .faq summary::after {
+    background: none;
+    border: 1px solid CanvasText;
+    border-radius: 2px;
+    position: relative;
+  }
+  .faq summary::after::before,
+  .faq summary::after::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 1px;
+    background: CanvasText;
+  }
+  .faq summary::after::after { transform: rotate(90deg); }
+  .faq details[open] summary::after::after { transform: rotate(0deg); }
+}
+
+.faq details p {
+  margin: var(--s-200) 0 0;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 24px;
+  max-width: 620px;
+  text-wrap: pretty;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .faq summary:hover { color: #ffffff; }
+  .faq summary:hover::after { color: var(--text); }
+}
+
+/* ---------- final cta ---------- */
+
+.final {
+  padding: var(--s-900) 0;
+  border-top: 1px solid var(--line);
+  text-align: center;
+}
+.final h2 { max-width: 680px; margin: 0 auto; text-wrap: balance; }
+.final p {
+  margin: var(--s-200) auto 0;
+  max-width: 480px;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 28px;
+  text-wrap: pretty;
+}
+.final .cta-row { justify-content: center; }
+
+/* ---------- footer ---------- */
+
+footer {
+  border-top: 1px solid var(--line);
+  padding: var(--s-700) 0 var(--s-600);
+}
+
+.footer-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-400);
+}
+
+.footer-note { max-width: 360px; color: var(--dim); font-size: 12px; line-height: 16px; margin: 0; }
+
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-300);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.footer-links a {
+  text-decoration: none;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+  transition: color 300ms var(--ease);
+  padding: var(--s-50) 0;
+}
+@media (hover: hover) and (pointer: fine) {
+  .footer-links a:hover { color: var(--text); }
+}
+
+/* ---------- scroll reveal ---------- */
+
+/* Nothing is hidden until script proves it can reveal it again. Without this
+   class on <html>, a blocked script would leave the page blank. */
+.js .reveal {
+  opacity: 0;
+  transform: translateY(32px);
+  transition: opacity 700ms var(--ease), transform 700ms var(--ease);
+}
+.js .reveal.in { opacity: 1; transform: translateY(0); }
+
+/* ---------- narrow ---------- */
+
+@media (max-width: 980px) {
+  .hero-grid { grid-template-columns: minmax(0, 1fr); gap: var(--s-700); }
+  .hero { padding-top: 128px; }
+  /* the index stays in its column, so the claim and the text stay aligned */
+  .benefit { grid-template-columns: 32px minmax(0, 1fr); gap: var(--s-200) var(--s-300); }
+  .benefit p { grid-column: 2; }
+  .steps, .notes, .figure-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .looks { gap: var(--s-300); }
+}
+
+@media (max-width: 720px) {
+  .nav-links, .nav .btn-key { display: none; }
+  .nav { padding: var(--s-75); gap: var(--s-100); }
+  .nav-toggle { display: block; }
+  .nav-shell { top: var(--s-100); }
+  .menu-panel { display: flex; }
+
+  /* Without script the panel can never open, so the links come back into the
+     bar itself rather than disappearing from the phone entirely. */
+  html.no-js .nav-links {
+    display: flex;
+    gap: var(--s-200);
+  }
+  html.no-js .nav-links li:first-child { display: none; }
+  html.no-js .nav-toggle { display: none; }
+
+  .heading-1 { font-size: 36px; line-height: 40px; letter-spacing: -0.025em; }
+  .heading-2 { font-size: 30px; line-height: 36px; letter-spacing: -0.02em; }
+  .heading-5 { font-size: 20px; line-height: 28px; letter-spacing: -0.014em; }
+
+  .hero { padding-top: 104px; padding-bottom: var(--s-700); }
+  .hero-sub { font-size: 16px; line-height: 24px; margin-top: var(--s-200); }
+  .section, .tagline, .final { padding: var(--s-700) 0; }
+  .section-head { margin-bottom: var(--s-500); }
+  .section-head p { font-size: 16px; line-height: 24px; }
+  .tagline-text { font-size: 24px; line-height: 32px; }
+  .figure-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-300); }
+  .figure-value { font-size: 30px; line-height: 36px; }
+  .steps, .notes, .nots, .looks { grid-template-columns: minmax(0, 1fr); }
+  .benefit { padding: var(--s-400) 0; }
+  .cta-row .btn { width: 100%; }
+  .cta-row { gap: var(--s-75); }
+  .popup, .popup img { width: 100%; max-width: 320px; }
+  .final .cta-row { width: 100%; }
+  .footer-grid { flex-direction: column; }
+}
+
+/* ---------- reduced motion: no movement, keep the fades ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .js .rise { opacity: 1; transform: none; transition: none; }
+  .js .reveal { opacity: 1; transform: none; transition: none; }
+  .js .tagline-text .w { color: var(--text); transition: none; }
+  .menu-panel a { transform: none; transition: none; opacity: 1; }
+  .btn:active { transform: none; }
+  .nav-links a::after { display: none; }
+}
+</style>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<div class="nav-shell">
+  <nav class="nav" aria-label="Main">
+    <a class="brand" href="#top">
+      <span class="brand-mark" aria-hidden="true"></span>
+      drift
+    </a>
+    <ul class="nav-links" role="list">
+      <li><a href="#how">How it works</a></li>
+      <li><a href="#inside">Inside</a></li>
+      <li><a href="#questions">Questions</a></li>
+    </ul>
+    <a class="btn btn-key" href="https://github.com/yaffalhakim1/drift/releases/download/v0.1.0/drift-setup-0.1.0-amd64.exe">Download</a>
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="menu" aria-label="Open menu">
+      <span></span><span></span>
+    </button>
+  </nav>
+</div>
+
+<div class="menu-panel" id="menu" data-open="false" hidden>
+  <a href="#how">How it works</a>
+  <a href="#inside">Inside</a>
+  <a href="#questions">Questions</a>
+  <a href="https://github.com/yaffalhakim1/drift/releases/download/v0.1.0/drift-setup-0.1.0-amd64.exe">Download for Windows</a>
+</div>
+
+<main id="main">
+
+  <section class="hero" id="top">
+    <div class="wrap hero-grid">
+      <div class="hero-copy">
+        <p class="badge rise rise-1"><i aria-hidden="true"></i> Windows 10 and 11</p>
+
+        <h1 class="heading-1 rise rise-2">A record player for your system tray</h1>
+
+        <p class="hero-sub rise rise-3">
+          drift plays one long mix from your own disk and cuts it into 28 chapters,
+          so the title always follows the music. No browser, no account, nothing to
+          download but the app.
+        </p>
+
+        <div class="cta-row rise rise-4">
+          <a class="btn btn-key btn-lg" href="https://github.com/yaffalhakim1/drift/releases/download/v0.1.0/drift-setup-0.1.0-amd64.exe">
+            Download for Windows
+          </a>
+          <a class="btn btn-ghost btn-lg" href="#how">See how it works</a>
+        </div>
+
+        <p class="proof rise rise-5">
+          <span>3.4 MB installer</span>
+          <span>Free, MIT licence</span>
+          <span>No account, no telemetry</span>
+        </p>
+      </div>
+
+      <div class="hero-visual rise rise-4">
+        <div class="popup">
+          <img src="screenshots/popup-dark.png" width="960" height="1755"
+               alt="The drift popup in dark mode: a turning record with a cream label, the chapter title Owls of the Night by Kupla, a seek bar at 36:09, and the chapter list below it.">
+        </div>
+        <p class="popup-caption">The popup, 320 by 585 pixels, at the size Windows gives it</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="figures" aria-label="The app in figures">
+    <div class="wrap">
+      <ul class="figure-grid reveal" role="list">
+        <li>
+          <span class="figure-value">28<small>chapters</small></span>
+          <span class="figure-label">One marker for each stop on the tracklist</span>
+        </li>
+        <li>
+          <span class="figure-value">320<small>by 585</small></span>
+          <span class="figure-label">Pixels, the size of the panels beside it</span>
+        </li>
+        <li>
+          <span class="figure-value">3.4<small>MB</small></span>
+          <span class="figure-label">Installer, with no browser engine inside</span>
+        </li>
+        <li>
+          <span class="figure-value">0<small>accounts</small></span>
+          <span class="figure-label">Nothing to sign in to, and no usage sent anywhere</span>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section" id="why">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <h2 class="heading-2">Small, because it does little</h2>
+        <p>
+          A player for one kind of listening: a long mix, already on your disk, that
+          you leave running while you work.
+        </p>
+      </div>
+
+      <div class="benefits">
+        <article class="benefit reveal">
+          <span class="benefit-index mono">01</span>
+          <h3 class="heading-5">It plays what you already own</h3>
+          <p>
+            Point drift at one MP3, Ogg, Oga or WAV file. The mix is read from disk as it
+            plays, so a long recording costs the same memory as a short one. The
+            file never leaves the machine.
+          </p>
+        </article>
+
+        <article class="benefit reveal">
+          <span class="benefit-index mono">02</span>
+          <h3 class="heading-5">The title follows the music</h3>
+          <p>
+            Twenty eight chapter marks sit at the timestamps of your tracklist. As the
+            mix crosses from one song to the next, the window changes name, artist and
+            length without you touching anything.
+          </p>
+        </article>
+
+        <article class="benefit reveal">
+          <span class="benefit-index mono">03</span>
+          <h3 class="heading-5">The music outlives the window</h3>
+          <p>
+            Playback runs in the app, not in the popup. Close the panel and the window
+            is gone while the song keeps going. Open it again and the record is still
+            turning where you left it.
+          </p>
+        </article>
+
+        <article class="benefit reveal">
+          <span class="benefit-index mono">04</span>
+          <h3 class="heading-5">Nothing sits underneath</h3>
+          <p>
+            No Electron, no webview, no runtime bundle. drift draws its own interface
+            with MyGo, so the record, the grooves and the progress ring are paint calls
+            rather than images. The whole program is 10 MB.
+          </p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="how">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <h2 class="heading-2">Three steps, then it is out of the way</h2>
+        <p>The first run asks for your recording once. Later runs open it before you ask.</p>
+      </div>
+
+      <ol class="steps" role="list">
+        <li class="step reveal">
+          <h3 class="heading-5">Install and open the tray</h3>
+          <p>Run the installer. drift starts with no window at all. Click the record icon in the tray and the panel drops down.</p>
+        </li>
+        <li class="step reveal">
+          <h3 class="heading-5">Point it at your mix</h3>
+          <p>Choose one audio file. The app takes a single recording, not a folder, and remembers the path for the next time.</p>
+        </li>
+        <li class="step reveal">
+          <h3 class="heading-5">Press play, close the panel</h3>
+          <p>The music carries on in the tray. Right click the icon for play, pause, next chapter, or quit.</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="tagline" aria-labelledby="tagline-label">
+    <div class="wrap">
+      <h2 id="tagline-label" class="tagline-text" data-reveal-words>
+        The mix is already on your disk. drift makes it feel like a record on a shelf.
+      </h2>
+    </div>
+  </section>
+
+  <section class="section" id="inside">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <h2 class="heading-2">Two appearances, one blue</h2>
+        <p>
+          The record stays vinyl in daylight. The accent is Apple system blue, in the
+          variant each appearance needs to stay readable.
+        </p>
+      </div>
+
+      <div class="looks">
+        <figure class="look reveal">
+          <div class="popup">
+            <img src="screenshots/popup-dark.png" width="960" height="1755" loading="lazy"
+                 alt="The popup in dark mode: near black surface, cream record label, blue progress ring and blue seek bar.">
+          </div>
+          <figcaption>Dark. Blue at #0A84FF on the dark surface.</figcaption>
+        </figure>
+
+        <figure class="look reveal">
+          <div class="popup">
+            <img src="screenshots/popup-light.png" width="960" height="1755" loading="lazy"
+                 alt="The same popup in light mode: white surface, dark record, and the same blue darkened for contrast.">
+          </div>
+          <figcaption>Light. The blue darkens to #0A6FD6 to clear 4.5 to 1.</figcaption>
+        </figure>
+      </div>
+
+      <div class="notes">
+        <div class="note reveal">
+          <h3 class="title-3">The record is drawn, not loaded</h3>
+          <p>A painter draws the disc, eighteen grooves, the label and the progress ring every frame. No image is shipped for any of it.</p>
+        </div>
+        <div class="note reveal">
+          <h3 class="title-3">The print never turns</h3>
+          <p>The disc turns once every twelve seconds. The title on the label stays level, because a rotated title is unreadable in a still frame.</p>
+        </div>
+        <div class="note reveal">
+          <h3 class="title-3">The seek bar is a real slider</h3>
+          <p>Dragging, a click on the track, the arrow keys and a screen reader all reach the same control. Only the look is custom.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="limits">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <h2 class="heading-2">What it does not do</h2>
+        <p>Worth knowing before you install it.</p>
+      </div>
+
+      <div class="nots">
+        <article class="not reveal">
+          <span class="not-mark" aria-hidden="true"></span>
+          <div>
+            <h3 class="title-3">It does not download music</h3>
+            <p>There is no catalogue, no search and no streaming service behind it. You supply the recording.</p>
+          </div>
+        </article>
+
+        <article class="not reveal">
+          <span class="not-mark" aria-hidden="true"></span>
+          <div>
+            <h3 class="title-3">It ships no audio</h3>
+            <p>The recording belongs to the artists in it. drift carries the tracklist, not the music.</p>
+          </div>
+        </article>
+
+        <article class="not reveal">
+          <span class="not-mark" aria-hidden="true"></span>
+          <div>
+            <h3 class="title-3">It cannot read AAC</h3>
+            <p>M4A and MP4 files are refused with a message telling you to convert them. The decoder handles MP3, Ogg, Oga and WAV.</p>
+          </div>
+        </article>
+
+        <article class="not reveal">
+          <span class="not-mark" aria-hidden="true"></span>
+          <div>
+            <h3 class="title-3">It does not sync anywhere</h3>
+            <p>No account, no cloud, no library. Your mix stays on the machine you chose it on.</p>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="questions">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <h2 class="heading-2">Questions</h2>
+      </div>
+
+      <div class="faq reveal">
+        <details>
+          <summary>Do I need an internet connection?</summary>
+          <p>No. Nothing in the app fetches a mix, checks for a newer version or reports what you play. It runs the same on a machine that has never been online.</p>
+        </details>
+
+        <details>
+          <summary>Which audio formats does it take?</summary>
+          <p>MP3, Ogg, Oga and WAV. It reads them as they play and seeks inside the file, so a long recording does not load into memory first.</p>
+        </details>
+
+        <details>
+          <summary>Why does it refuse my M4A file?</summary>
+          <p>The bundled decoder cannot read AAC. drift names the file and asks you to convert it to MP3 or Ogg rather than failing later as silence.</p>
+        </details>
+
+        <details>
+          <summary>Does closing the popup stop the music?</summary>
+          <p>No. Audio lives in the app, not the window. The popup is only a view onto a player that keeps running while it is closed.</p>
+        </details>
+
+        <details>
+          <summary>Will it find my mix next time?</summary>
+          <p>Yes. The path is saved when you open a file, and the app tries it at startup. If the file has moved or gone, drift opens with the empty state and asks you to choose again.</p>
+        </details>
+
+        <details>
+          <summary>Will the chapter titles match my recording?</summary>
+          <p>Only if your recording is the one the timestamps were checked against. The twenty eight offsets live in one file, so you can edit them to fit your own mix and rebuild.</p>
+        </details>
+
+        <details>
+          <summary>Is there a Mac or Linux build?</summary>
+          <p>Not yet. The framework targets all three, but only the Windows installer is built and tested. The tray behaviour differs on Linux, where the icon only offers a menu.</p>
+        </details>
+
+        <details>
+          <summary>What does it cost?</summary>
+          <p>Nothing. The code is MIT licensed. The music is a separate matter, and it is not mine to license.</p>
+        </details>
+
+        <details>
+          <summary>How big is it, really?</summary>
+          <p>The installer is 3.4 MB and the program it puts in place is 10 MB. There is no runtime to install first, because the interface is drawn by the program itself.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <section class="final">
+    <div class="wrap">
+      <h2 class="heading-2 reveal">Put the record in the tray</h2>
+      <p class="reveal">One download, one mix file, and the rest of the afternoon.</p>
+      <div class="cta-row reveal">
+        <a class="btn btn-key btn-lg" href="https://github.com/yaffalhakim1/drift/releases/download/v0.1.0/drift-setup-0.1.0-amd64.exe">
+          Download for Windows
+        </a>
+        <a class="btn btn-ghost btn-lg" href="https://github.com/yaffalhakim1/drift">Read the source</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap footer-grid">
+    <p class="footer-note">
+      drift is free software under the MIT licence. It has no account and sends
+      no usage data. The music named in the screenshots belongs to the artists
+      in the tracklist, not to this project.
+    </p>
+    <ul class="footer-links" role="list">
+      <li><a href="https://github.com/yaffalhakim1/drift">GitHub</a></li>
+      <li><a href="https://github.com/yaffalhakim1/drift/releases">Release notes</a></li>
+      <li><a href="learn-go.html">How the code works</a></li>
+    </ul>
+  </div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---- hero: enter once, in reading order ---- */
+  //
+  // The elements start hidden in CSS, but only while this script runs. Adding
+  // the class on the next frame gives the transition a starting point; the
+  // timeout covers a browser that fires no animation frame, such as a page
+  // restored from the back forward cache.
+  var risers = document.querySelectorAll(".rise");
+  function enterHero() {
+    risers.forEach(function (el) { el.classList.add("in"); });
+  }
+  if (reduce) {
+    enterHero();
+  } else {
+    requestAnimationFrame(function () {
+      requestAnimationFrame(enterHero);
+    });
+    window.setTimeout(enterHero, 400);
+  }
+
+  /* ---- mobile panel ---- */
+  var toggle = document.querySelector(".nav-toggle");
+  var panel = document.getElementById("menu");
+  var closeTimer = 0;
+
+  function setMenu(open) {
+    if (!toggle || !panel) return;
+
+    /* a second tap inside the closing window must not schedule a second
+       hide: without clearing it, the panel would close and then vanish while
+       the icon still says it is open */
+    window.clearTimeout(closeTimer);
+
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    toggle.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+    if (open) {
+      panel.hidden = false;
+      /* clearing inert before the panel becomes live again: a reopen inside
+         the closing window would otherwise leave a visible, open, unusable
+         panel */
+      panel.inert = false;
+      /* one frame between removing hidden and setting the open state, so the
+         transition has a starting point to move from */
+      requestAnimationFrame(function () { panel.setAttribute("data-open", "true"); });
+    } else {
+      panel.setAttribute("data-open", "false");
+      /* inert while it fades, so a tap cannot land on an invisible link and
+         the keyboard cannot tab into the closing panel */
+      panel.inert = true;
+      closeTimer = window.setTimeout(function () {
+        panel.hidden = true;
+        panel.inert = false;
+      }, reduce ? 0 : 300);
+    }
+  }
+
+  if (toggle && panel) {
+    toggle.addEventListener("click", function () {
+      setMenu(toggle.getAttribute("aria-expanded") !== "true");
+    });
+
+    panel.addEventListener("click", function (e) {
+      if (e.target.closest("a")) setMenu(false);
+    });
+
+    /* the panel covers the page, so focus must not tab into the page behind
+       it. The toggle stays first in the ring so it can always be reached to
+       close the panel again. */
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && toggle.getAttribute("aria-expanded") === "true") {
+        setMenu(false);
+        toggle.focus();
+        return;
+      }
+
+      if (e.key !== "Tab") return;
+      if (toggle.getAttribute("aria-expanded") !== "true") return;
+
+      var stops = [toggle].concat([].slice.call(panel.querySelectorAll("a")));
+      var first = stops[0];
+      var last = stops[stops.length - 1];
+
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    });
+  }
+
+  /* ---- section reveals, once ---- */
+  //
+  // IntersectionObserver covers normal scrolling. It does not cover a jump
+  // that skips a block: the block starts outside the viewport and ends outside
+  // the viewport, so no change is reported and it would stay invisible.
+  // A sweep on scroll, on load and on a hash jump catches that. Scroll events
+  // are already coalesced to one per frame by the browser, so the sweep reads
+  // boxes directly and the work stops as soon as the list is empty.
+  var revealables = [].slice.call(document.querySelectorAll(".reveal"));
+  var taglineSpans = [];
+  var revealer = null;
+  var wordWatcher = null;
+  var swiping = true;
+
+  function show(el) {
+    if (!el.classList.contains("in")) el.classList.add("in");
+  }
+
+  function sweep() {
+    if (!swiping) return;
+
+    var line = window.innerHeight * 0.88;
+    for (var i = revealables.length - 1; i >= 0; i--) {
+      var box = revealables[i].getBoundingClientRect();
+      /* above the viewport, so a jump skipped it, or inside it now */
+      if (box.bottom < 0 || box.top < line) {
+        show(revealables[i]);
+        if (revealer) revealer.unobserve(revealables[i]);
+        revealables.splice(i, 1);
+      }
+    }
+
+    /* a word left above the viewport lights at once, so the line is never
+       half dark behind you */
+    var wordLine = window.innerHeight * 0.34;
+    var wordsLeft = 0;
+    taglineSpans.forEach(function (s) {
+      if (s.classList.contains("on")) return;
+      var box = s.getBoundingClientRect();
+      if (box.bottom < 0 || box.top < wordLine) {
+        s.classList.add("on");
+        if (wordWatcher) wordWatcher.unobserve(s);
+      } else {
+        wordsLeft++;
+      }
+    });
+
+    if (!revealables.length && !wordsLeft) {
+      swiping = false;
+      window.removeEventListener("scroll", sweep);
+      window.removeEventListener("resize", sweep);
+    }
+  }
+
+  /* ---- tagline: one word at a time, in reading order ---- */
+  var tagline = document.querySelector("[data-reveal-words]");
+  if (tagline) {
+    var words = tagline.textContent.trim().split(/\s+/);
+    tagline.textContent = "";
+    taglineSpans = words.map(function (word, i) {
+      var span = document.createElement("span");
+      span.className = "w";
+      span.textContent = word;
+      tagline.appendChild(span);
+      if (i < words.length - 1) tagline.appendChild(document.createTextNode(" "));
+      return span;
+    });
+  }
+
+  if ("IntersectionObserver" in window && !reduce) {
+    revealer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        show(entry.target);
+        revealer.unobserve(entry.target);
+        var at = revealables.indexOf(entry.target);
+        if (at >= 0) revealables.splice(at, 1);
+      });
+    }, { rootMargin: "0px 0px -12% 0px", threshold: 0.05 });
+    revealables.forEach(function (el) { revealer.observe(el); });
+
+    if (taglineSpans.length) {
+      /* the trigger line sits a third of the way down the viewport, so a word
+         lights as it crosses it rather than when the block arrives */
+      wordWatcher = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          entry.target.classList.add("on");
+          wordWatcher.unobserve(entry.target);
+        });
+      }, { rootMargin: "0px 0px -66% 0px", threshold: 0 });
+      taglineSpans.forEach(function (s) { wordWatcher.observe(s); });
+    }
+
+  /* the same jump problem: a sweep on load, resize and hash change covers a
+     block the observer never reported, and stops once everything is shown */
+    window.addEventListener("scroll", sweep, { passive: true });
+    window.addEventListener("hashchange", sweep);
+    window.addEventListener("load", sweep);
+    window.addEventListener("resize", sweep, { passive: true });
+    sweep();
+  } else {
+    revealables.forEach(show);
+    taglineSpans.forEach(function (s) { s.classList.add("on"); });
+  }
+})();
+</script>
+
+</body>
+</html>
+
+
+
+

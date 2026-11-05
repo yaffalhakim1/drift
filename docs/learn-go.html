@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="A plain-English study path for the drift Go codebase: seven Go ideas, one lock, the immediate-mode UI mindset, and the order to read the files.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&display=swap">
+<title>Learn Go with drift, a study path for the desktop codebase</title>
+<style>
+/* Hallmark · theme: drift (from the product) · genre: editorial · shape: long document · signature: the architecture map · material: words + real code from the repo · pictures: none (code is the picture) · absent: photos, logos, metrics · nav: none (toc in mast) · footer: one mast line · hero: statement · posture: restrained · surface: absolute · dropped: kicker line (hero block count), photos (a code study needs none) */
+/* critique: floor held, tokens only, focus-visible, reduced-motion fallback, capped container, no slop patterns. */
+/* waived 58 (words per screen, page total): a study page is read top to bottom like documentation; the density is the material, cutting to 80 words per screen would gut the lessons. */
+/* waived 1 (display face): Inter is the single voice on purpose; ui-monospace is the second face and mono is the material. */
+/* waived 7b (pure white surfaces): the surfaces are drift's own light theme, matched to the product the page documents. */
+
+:root {
+  /* colour: taken from desktop/internal/view/theme.go and the AGENTS design notes */
+  --paper: #faf9f7;
+  --surface: #ffffff;
+  --ink: #1b1814;
+  --muted: #6f6a62;
+  --accent: #0a6fd6;        /* drift's light-mode blue, 4.65:1 on paper */
+  --accent-strong: #0a5fb8; /* hover step of the accent */
+  --accent-deep: #09509d;   /* pressed step of the accent */
+  --accent-soft: #e8f1fb;
+  --border: #e3e0da;
+  --code-bg: #14120f;
+  --code-ink: #e8e4dc;
+  --code-key: #8ab8f0;
+  --code-str: #a8cf8e;
+  --code-com: #8a857c;
+  --ok: #2e7d4f;
+
+  /* type: Inter everywhere, mono for code. The page loads Inter from Google Fonts;
+     the fallbacks cover offline reading, so the page never waits on the network. */
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-ui: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+
+  /* space + shape */
+  --gap: 1.5rem;
+  --radius: 10px;
+  --measure: 68ch;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  overflow-x: clip;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16.5px;
+  line-height: 1.65;
+  letter-spacing: -0.011em;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.wrap {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+
+/* ---------- header ---------- */
+
+header.mast {
+  border-bottom: 1px solid var(--border);
+  padding: 3.5rem 0 3rem;
+}
+
+.kicker {
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 0 0 0.75rem;
+}
+
+h1 {
+  font-size: clamp(2rem, 5vw, 2.9rem);
+  line-height: 1.12;
+  margin: 0 0 1rem;
+  font-weight: 700;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+}
+
+.lede {
+  font-size: 1.15rem;
+  color: var(--muted);
+  max-width: var(--measure);
+  margin: 0 0 1.5rem;
+}
+
+.toc {
+  font-family: var(--font-ui);
+  font-size: 0.95rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.25rem;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.toc a { text-decoration: none; }
+.toc a:hover { text-decoration: underline; }
+
+/* ---------- sections ---------- */
+
+.cta {
+  font-family: var(--font-ui);
+  font-weight: 600;
+  white-space: nowrap;
+  display: inline-block;
+  background: var(--accent);
+  color: var(--paper);
+  text-decoration: none;
+  padding: 0.6rem 1.2rem;
+  border-radius: var(--radius);
+}
+.cta:hover { background: var(--accent-strong); }
+.cta:active { background: var(--accent-deep); }
+
+section { padding: 3rem 0 0.5rem; }
+
+h2 {
+  font-size: 1.55rem;
+  margin: 0 0 0.35rem;
+  font-weight: 700;
+  text-wrap: balance;
+}
+
+.sub {
+  color: var(--muted);
+  margin: 0 0 1.5rem;
+  max-width: var(--measure);
+}
+
+h3 {
+  font-family: var(--font-ui);
+  font-size: 1.02rem;
+  font-weight: 650;
+  margin: 2rem 0 0.5rem;
+}
+
+p { max-width: var(--measure); margin: 0 0 1rem; }
+
+ul.plain { max-width: var(--measure); padding-left: 1.2rem; margin: 0 0 1rem; }
+ul.plain li { margin-bottom: 0.5rem; }
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--accent-soft);
+  color: var(--ink);
+  padding: 0.1em 0.35em;
+  border-radius: 5px;
+  overflow-wrap: break-word;
+}
+
+/* ---------- code blocks ---------- */
+
+pre {
+  background: var(--code-bg);
+  color: var(--code-ink);
+  border-radius: var(--radius);
+  padding: 1rem 1.15rem;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.84rem;
+  line-height: 1.6;
+  margin: 0 0 1rem;
+  position: relative;
+  z-index: 1;
+}
+pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+.k { color: var(--code-key); }
+.s { color: var(--code-str); }
+.c { color: var(--code-com); }
+
+.filetag {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--muted);
+  display: block;
+  margin-bottom: -0.6rem;
+}
+
+/* ---------- the map ---------- */
+
+.map {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.6rem;
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  margin: 1.5rem 0;
+}
+
+.map .node {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
+}
+.map .node strong { font-family: var(--font-mono); font-size: 0.88rem; }
+.map .node span { color: var(--muted); display: block; font-size: 0.84rem; margin-top: 0.2rem; }
+
+.map .arrow {
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding-left: 1.4rem;
+}
+
+.map .hub { border-left: 3px solid var(--accent); }
+
+/* ---------- cards ---------- */
+
+.cards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--gap);
+  margin: 1.5rem 0;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.2rem;
+  overflow-wrap: break-word;
+  min-width: 0;
+}
+.card h3 { margin: 0 0 0.4rem; }
+.card p { font-size: 0.95rem; margin-bottom: 0.75rem; }
+.card .where {
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  color: var(--accent);
+}
+
+/* ---------- tables ---------- */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  margin: 1.25rem 0;
+}
+th, td {
+  text-align: left;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  overflow-wrap: break-word;
+}
+th {
+  font-weight: 650;
+  color: var(--muted);
+  border-bottom-width: 2px;
+}
+
+/* ---------- checklist ---------- */
+
+ol.path {
+  counter-reset: step;
+  list-style: none;
+  padding: 0;
+  margin: 1.5rem 0;
+  max-width: var(--measure);
+}
+ol.path li {
+  counter-increment: step;
+  position: relative;
+  padding: 0 0 1.4rem 3rem;
+  border-left: 1px solid var(--border);
+  margin-left: 1rem;
+}
+ol.path li::before {
+  content: counter(step);
+  position: absolute;
+  left: -1rem;
+  top: 0;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--accent);
+  font-family: var(--font-ui);
+  font-weight: 650;
+  font-size: 0.9rem;
+  display: grid;
+  place-items: center;
+}
+ol.path li:last-child { border-left-color: transparent; }
+ol.path strong { display: block; font-family: var(--font-ui); }
+ol.path p { margin: 0.2rem 0 0; font-size: 0.95rem; color: var(--muted); }
+
+/* ---------- callout ---------- */
+
+.note {
+  background: var(--accent-soft);
+  border-radius: var(--radius);
+  padding: 1rem 1.2rem;
+  font-size: 0.95rem;
+  margin: 1.25rem 0;
+  max-width: var(--measure);
+}
+.note strong { font-family: var(--font-ui); }
+
+/* ---------- footer ---------- */
+
+footer {
+  border-top: 1px solid var(--border);
+  margin-top: 4rem;
+  padding: 2rem 0 3rem;
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+@media (min-width: 700px) {
+  .map { grid-template-columns: 1fr 1fr 1fr; }
+  .map .arrow { display: none; }
+  .cards.two { grid-template-columns: 1fr 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="mast">
+  <div class="wrap">
+    <h1>Learn Go in one real codebase</h1>
+    <p class="lede">drift is a Go music tray app, about 1,000 lines.</p>
+    <p><a class="cta" href="#basics">Start with the seven ideas</a></p>
+    <ul class="toc">
+      <li><a href="#map">The map</a></li>
+      <li><a href="#basics">Go basics</a></li>
+      <li><a href="#mutex">The one lock</a></li>
+      <li><a href="#immediate">The UI mindset</a></li>
+      <li><a href="#order">Reading order</a></li>
+      <li><a href="#fix">When something breaks</a></li>
+    </ul>
+  </div>
+</header>
+
+<main class="wrap">
+
+<!-- ============ THE MAP ============ -->
+<section id="map">
+  <h2>First, the map</h2>
+  <p class="sub">Three packages, one direction of data flow. Keep this picture in your head; every file below hangs off it.</p>
+
+  <div class="map">
+    <div class="node hub"><strong>main.go</strong><span>Owns everything. Tray icon, popup window, file picker, saved theme.</span></div>
+    <div class="node"><strong>internal/player</strong><span>Plays the file. Open, play, pause, seek, volume. Outlives the popup, so music keeps going.</span></div>
+    <div class="node"><strong>internal/mix</strong><span>Pure data. The 28 chapter names and their start times. No audio here.</span></div>
+  </div>
+  <div class="map" style="margin-top:-0.6rem">
+    <div class="arrow">owns ↓</div>
+    <div class="arrow">reads ↓</div>
+    <div class="arrow">searched by ↓</div>
+  </div>
+  <div class="map" style="margin-top:-0.6rem">
+    <div class="node"><strong>internal/view</strong><span>Draws the popup. Rebuilt from scratch every frame. Holds no state of its own.</span></div>
+  </div>
+
+  <p>The word <code>internal</code> is a Go rule, not a naming choice: code under <code>internal/</code> can only be imported by this repo. That is what keeps the layers from leaking into each other.</p>
+
+  <div class="note"><strong>One sentence to remember:</strong> main owns state, player owns sound, mix owns facts, view draws. When something breaks, the symptom tells you the package.</div>
+</section>
+
+<!-- ============ BASICS ============ -->
+<section id="basics">
+  <h2>Seven Go ideas, with real code</h2>
+  <p class="sub">Each card is one idea, explained in plain words, with a snippet taken from this repo. Learn these and the whole codebase reads like plain text.</p>
+
+  <div class="cards">
+
+    <div class="card">
+      <h3>1 · Packages and imports</h3>
+      <p>A package is a folder of code that goes together. The first line of every file names its package. <code>import</code> pulls in other packages, like <code>require</code> in Node.</p>
+      <pre><code><span class="k">package</span> player
+
+<span class="k">import</span> (
+    <span class="s">"time"</span>
+    <span class="s">"github.com/egoist/mygo/audio"</span>
+    <span class="s">"drift/internal/mix"</span>
+)</code></pre>
+      <span class="where">player/player.go, top of file</span>
+    </div>
+
+    <div class="card">
+      <h3>2 · Structs and methods</h3>
+      <p>A struct is a group of fields. A method is a function attached to a struct. The part in brackets, <code>(p *Player)</code>, is the receiver: which struct the method works on.</p>
+      <pre><code><span class="k">type</span> Chapter <span class="k">struct</span> {
+    At     time.Duration
+    Artist <span class="k">string</span>
+    Title  <span class="k">string</span>
+}
+
+<span class="c">// Name is a method on a Chapter value.</span>
+<span class="k">func</span> (c Chapter) Name() <span class="k">string</span> {
+    <span class="k">if</span> c.Title == <span class="s">""</span> { <span class="k">return</span> c.Artist }
+    <span class="k">return</span> c.Title
+}</code></pre>
+      <span class="where">mix/tracks.go</span>
+      <p style="margin-top:0.75rem"><strong>The one rule that matters:</strong> <code>(c Chapter)</code> gets a copy; <code>(p *Player)</code> gets the real one and can change it. Data types like Chapter use value receivers. Working things like Player use pointer receivers.</p>
+    </div>
+
+    <div class="card">
+      <h3>3 · Pointers, just enough</h3>
+      <p><code>&amp;x</code> means "the address of x". <code>*T</code> means "a pointer to a T". The view gets pointers to the app's state, so it always sees the live values, not old copies.</p>
+      <pre><code><span class="c">// Model holds pointers, so the view reads live state.</span>
+Scroll *ui.ScrollState
+Angle  *float32</code></pre>
+      <span class="where">view/view.go</span>
+    </div>
+
+    <div class="card">
+      <h3>4 · Errors are values</h3>
+      <p>Go has no exceptions here. Functions return an error next to their result. You check it with <code>if err != nil</code>. Once this pattern clicks, all Go code reads the same.</p>
+      <pre><code>f, err := os.Open(path)
+<span class="k">if</span> err != <span class="k">nil</span> {
+    <span class="k">return</span> fmt.Errorf(<span class="s">"cannot open the recording: %w"</span>, err)
+}</code></pre>
+      <span class="where">player/player.go, Open()</span>
+      <p style="margin-top:0.75rem"><code>%w</code> wraps the original error inside the new one, so the cause is never lost.</p>
+    </div>
+
+    <div class="card">
+      <h3>5 · Slices and maps</h3>
+      <p>A slice is a list. A map is a lookup table. The 28 chapters are one slice; the icon lookup is a map.</p>
+      <pre><code><span class="c">// a slice of structs</span>
+<span class="k">var</span> Chapters = []Chapter{
+    {0, <span class="s">"Intro"</span>, <span class="s">""</span>},
+    {15 * time.Second, <span class="s">"WYS"</span>, <span class="s">"Snowman"</span>},
+    ...
+}
+
+<span class="c">// a map: id in, glyph name out</span>
+glyph := <span class="k">map</span>[<span class="k">string</span>]<span class="k">string</span>{
+    <span class="s">"system"</span>: <span class="s">"auto"</span>,
+    <span class="s">"light"</span>:  <span class="s">"sun"</span>,
+    <span class="s">"dark"</span>:   <span class="s">"moon"</span>,
+}[ids[i]]</code></pre>
+      <span class="where">mix/tracks.go and view/view.go</span>
+    </div>
+
+    <div class="card">
+      <h3>6 · Closures</h3>
+      <p>Functions are values in Go. You can pass one to another function. MyGo builds every layout this way: you open an element, then hand it a function that fills its children.</p>
+      <pre><code>ui.Column(c).Fill().Children(<span class="k">func</span>() {
+    header(c, t, m)
+    plateSection(c, m, st)
+    chapterList(c, t, m, st)
+})</code></pre>
+      <span class="where">view/view.go, Screen()</span>
+    </div>
+
+    <div class="card">
+      <h3>7 · defer</h3>
+      <p><code>defer</code> runs a line when the function exits, no matter how it exits. Perfect for releasing locks or closing files.</p>
+      <pre><code><span class="k">func</span> (p *Player) Volume() <span class="k">float64</span> {
+    p.mu.Lock()
+    <span class="k">defer</span> p.mu.Unlock()  <span class="c">// runs on the way out</span>
+    <span class="k">return</span> p.volume
+}</code></pre>
+      <span class="where">player/player.go</span>
+    </div>
+
+    <div class="card">
+      <h3>8 · time.Duration</h3>
+      <p>A length of time you can do maths on. Chapters are written as <code>205 * time.Second</code> and the player compares them directly.</p>
+      <pre><code><span class="c">// duration maths, everywhere in this repo</span>
+{205 * time.Second, <span class="s">"Fatb"</span>, <span class="s">"Cotton Cloud"</span>}</code></pre>
+      <span class="where">mix/tracks.go</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MUTEX ============ -->
+<section id="mutex">
+  <h2>The one concurrency idea you must not skip</h2>
+  <p class="sub">Two things run at once in this app: the audio callback and the drawing of the window. Both touch the same Player. A mutex (a lock) makes them take turns.</p>
+
+  <div class="cards two">
+    <div class="card">
+      <h3>The rule</h3>
+      <p>In <code>player.go</code>, every read or write of the Player's fields happens between <code>Lock()</code> and <code>Unlock()</code>. One turn at a time, always.</p>
+      <pre><code><span class="k">func</span> (p *Player) State() State {
+    p.mu.Lock()
+    s, total, path := p.stream, p.total, p.path
+    p.mu.Unlock()
+
+    pos := s.Position()
+    <span class="k">return</span> State{ Loaded: <span class="k">true</span>,
+        Playing: s.Playing(), ... }
+}</code></pre>
+      <span class="where">lock on the way in, released on the way out</span>
+    </div>
+    <div class="card">
+      <h3>What happens if you skip it</h3>
+      <p>One day you "clean up" a lock away. The app then crashes in a way that looks random. That crash is called a <strong>data race</strong>: two things writing one value at the same moment.</p>
+      <p>Go can find these for you. Run <code>go test -race ./...</code> and it names the two lines that collided.</p>
+    </div>
+  </div>
+
+  <div class="note"><strong>Self-check:</strong> open <code>player.go</code> and find <code>Close()</code>. Notice it copies the fields out under the lock, then closes them after the lock. Ask yourself why. (Answer: closing a stream can take time; you never hold a lock during slow work.)</div>
+</section>
+
+<!-- ============ IMMEDIATE MODE ============ -->
+<section id="immediate">
+  <h2>The UI mindset: it is drawn fresh every frame</h2>
+  <p class="sub">MyGo is not like React. There are no components that remember things. The whole popup is rebuilt from scratch, many times a second, from your data.</p>
+
+  <div class="cards two">
+    <div class="card">
+      <h3>Why <code>app.model()</code> exists</h3>
+      <p>Every frame, main hands the view a fresh bundle of the current state and the callbacks.</p>
+    </div>
+    <div class="card">
+      <h3>Why scroll and angle live in <code>main.go</code></h3>
+      <p>The view forgets everything between frames. Only state stored outside survives, so main keeps it and passes it in as pointers.</p>
+    </div>
+    <div class="card">
+      <h3>Why an unbounded list never scrolls</h3>
+      <p>Each frame, a list asks its content how tall it is. If nothing bounds its height, it grows as tall as its content. Nothing is left to scroll. That is why the code sets an explicit height.</p>
+    </div>
+    <div class="card">
+      <h3>Why animation uses <code>el.Loop</code></h3>
+      <p>Loop tells the engine "keep sending me frames". A manual repaint request fights the engine, rebuilds everything, and stutters.</p>
+    </div>
+  </div>
+
+  <pre><code><span class="c">// the disc: one loop, 12 seconds per turn, 0..1 progress * 360</span>
+<span class="k">if</span> st.Playing &amp;&amp; !c.Preferences().ReduceMotion {
+    angle = el.Loop(<span class="s">"turn"</span>, 12*time.Second, ui.Linear) * 360
+}</code></pre>
+
+  <p>Read the MyGo docs before writing view code. They are already on this machine:</p>
+  <pre><code>C:\Users\yafit\go\pkg\mod\github.com\egoist\mygo@v0.7.4\docs\ui\</code></pre>
+</section>
+
+<!-- ============ ORDER ============ -->
+<section id="order">
+  <h2>The reading order</h2>
+  <p class="sub">Five files, smallest to biggest idea. Do them in this order; each one prepares you for the next.</p>
+
+  <ol class="path">
+    <li><strong>mix/tracks.go</strong><p>95 lines, pure Go, no framework. Structs, slices, a binary search. Finish this and ideas 1, 2, 5 and 8 are yours.</p></li>
+    <li><strong>view/theme.go</strong><p>34 lines. Your first look at the <code>ui</code> package. It also explains why the light blue is darker than the dark blue: contrast rules.</p></li>
+    <li><strong>player/player.go</strong><p>Errors, locks, callbacks. This is where Go starts feeling like Go.</p></li>
+  </ol>
+  <ol class="path" start="4">
+    <li><strong>main.go</strong><p>How the pieces get wired: tray, popup, file picker, saved theme. Notice how little it does itself. It connects things.</p></li>
+    <li><strong>view/view.go</strong><p>Immediate-mode UI in full. Read this last, after the mindset section above.</p></li>
+  </ol>
+
+  <p>Then skim the tests: <code>player_test.go</code> and <code>screen_test.go</code>. Tests show what the code is supposed to do, better than comments do.</p>
+  <pre><code>cd desktop
+go test ./...</code></pre>
+</section>
+
+<!-- ============ FIX ============ -->
+<section id="fix">
+  <h2>When something breaks</h2>
+  <p class="sub">Symptom on the left, file to open on the right. This is the same table from the repo's AGENTS.md.</p>
+
+  <table>
+    <thead>
+      <tr><th>Symptom</th><th>Open this</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>No tray icon, popup never opens</td><td><code>main.go</code>, <code>ready()</code></td></tr>
+      <tr><td>No sound, seek jumps</td><td><code>player/player.go</code></td></tr>
+      <tr><td>Wrong chapter title</td><td><code>mix/tracks.go</code></td></tr>
+      <tr><td>List will not scroll</td><td><code>view.go</code> <code>scrollHeight()</code></td></tr>
+      <tr><td>Record or bars stutter</td><td><code>view.go</code>, use <code>el.Loop</code></td></tr>
+      <tr><td>Wrong colours</td><td><code>view/theme.go</code></td></tr>
+      <tr><td>AAC refuses to play</td><td>On purpose, the decoder cannot read it</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ TEST ============ -->
+<section id="test">
+  <h2>Test before and after every change</h2>
+  <p class="sub">Two commands cover it. The first runs the unit tests. The second adds the real recording.</p>
+
+  <div class="cards two">
+    <div class="card">
+      <h3>Unit tests</h3>
+      <p>Fast, no audio file needed. Run them first.</p>
+      <pre><code>cd desktop
+go test ./...</code></pre>
+    </div>
+    <div class="card">
+      <h3>With the real recording</h3>
+      <p>Point <code>DRIFT_MIX</code> at your mp3. The streaming and chapter tests then use it.</p>
+      <pre><code><span class="c"># PowerShell</span>
+$env:DRIFT_MIX = "C:\path\to\your-mix.mp3"
+go test ./...</code></pre>
+    </div>
+  </div>
+
+  <p>If a test fails after your change, the test name names the behaviour that broke. Trust it before you trust a build that looks fine.</p>
+</section>
+
+<!-- ============ RESOURCES ============ -->
+<section>
+  <h2>Where to learn the Go itself</h2>
+  <p class="sub">Two free resources, then stop reading tutorials and read the repo.</p>
+
+  <div class="cards two">
+    <div class="card">
+      <h3>A Tour of Go</h3>
+      <p>Covers ideas 1 to 8 above, hands-on, in the browser. One afternoon is enough.</p>
+      <p><a href="https://go.dev/tour">go.dev/tour</a></p>
+    </div>
+    <div class="card">
+      <h3>Go by Example: Mutexes</h3>
+      <p>The shortest good page on the lock idea. Read it right before <code>player.go</code>.</p>
+      <p><a href="https://gobyexample.com/mutexes">gobyexample.com/mutexes</a></p>
+    </div>
+  </div>
+
+  <h3>Run the tests, before and after any change</h3>
+  <pre><code>cd desktop
+go test ./...</code></pre>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>Built for the drift codebase at <code>Y:\Learn\Go\youtube-playlist\desktop</code>. Code samples are from the repo itself. The mix belongs to its artists; this page ships no audio.</p>
+  </div>
+</footer>
+
+</body>
+</html>

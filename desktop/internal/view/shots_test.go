@@ -1,16 +1,21 @@
 package view
 
 import (
+	"fmt"
 	"image/png"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
+
+	"drift/internal/mix"
 )
 
 // TestDumpScreenshots writes the screenshots the README uses: the popup in
-// both appearances, with real chapter data, at twice the display scale so the
-// images stay sharp.
+// both appearances, with real chapter data, at three times the display scale.
+// The landing page shows the popup at up to 480 CSS px, so 3x keeps it sharp
+// on a 1x screen and on a 2x one.
 func TestDumpScreenshots(t *testing.T) {
 	if os.Getenv("DRIFT_SHOTS") == "" {
 		t.Skip("set DRIFT_SHOTS=1 to write screenshots")
@@ -42,7 +47,7 @@ func TestDumpScreenshots(t *testing.T) {
 					})
 				})
 			})
-		}, 320, 585, 2)
+		}, 320, 585, 3)
 
 		f, err := os.Create(s.name + ".png")
 		if err != nil {
@@ -130,42 +135,40 @@ func previewList(c *ui.Context) {
 	t := c.Theme()
 	ui.Box(c).Width(288).Height(1).MarginY(8).Background(t.Border)
 
-	rows := []struct {
-		n     string
-		title string
-		dur   string
-		on    bool
-	}{
-		{"18", "Owls of the Night", "3:20", true},
-		{"19", "Steps", "2:26", false},
-		{"20", "amber", "1:26", false},
-		{"21", "fever", "2:31", false},
-		{"22", "Circle", "1:50", false},
-	}
+	// The rows start at chapter 18 and the lengths come from mix.Length, the
+	// same call the screen makes. Hardcoded lengths drifted from the data:
+	// they said 3:20 for a chapter that runs 2:20, and a screenshot of other
+	// people's work should not carry numbers that are wrong.
+	const first, last = 17, 22
+
+	// Total is the length the popup shows on a 61 minute recording, so the
+	// last visible row has a length to report.
+	total := 61*time.Minute + 12*time.Second
 
 	var scroll ui.ScrollState
 	list := ui.Scroll(c).Grow(1)
 	list.TrackScroll(&scroll)
 	list.Children(func() {
-		for _, r := range rows {
+		for i := first; i <= last; i++ {
+			on := i == 17
 			el := ui.Row(c).AlignItems(ui.Center).Height(40).Gap(8).PaddingX(6).Radius(8)
-			if r.on {
+			if on {
 				el.Background(fade(t.Accent, 0.10))
 			}
 			el.Children(func() {
-				if r.on {
+				if on {
 					ui.Box(c).Width(22).Draw(func(p *ui.Painter, rr ui.Rect) {
 						drawBars(p, rr, t.Accent, 0.32)
 					})
 				} else {
-					ui.Text(c, r.n).FontSize(9.5).TextColor(t.TextMuted)
+					ui.Text(c, fmt.Sprintf("%02d", i+1)).FontSize(9.5).TextColor(t.TextMuted)
 				}
 				col := t.TextMuted
-				if r.on {
+				if on {
 					col = t.Text
 				}
-				ui.Text(c, r.title).FontSize(12.5).TextColor(col).MaxLines(1).Grow(1)
-				ui.Text(c, r.dur).FontSize(9.5).TextColor(t.TextMuted)
+				ui.Text(c, mix.Chapters[i].Name()).FontSize(12.5).TextColor(col).MaxLines(1).Grow(1)
+				ui.Text(c, Clock(mix.Length(i, total))).FontSize(9.5).TextColor(t.TextMuted)
 			})
 		}
 	})
