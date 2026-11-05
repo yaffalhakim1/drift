@@ -6,7 +6,6 @@ desktop/drift-dev.exe
 # preview renders
 desktop/internal/view/preview-*.png
 desktop/internal/view/popup-*.png
-desktop/shots/
 
 # never commit the recording
 *.mp3

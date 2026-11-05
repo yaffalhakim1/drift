@@ -84,6 +84,10 @@ desktop/
   internal/mix/tracks.go    the 28 chapters: offsets, artists, titles
   internal/player/          streams the file, seeks, tracks the chapter
   internal/view/            the screen, the record, the controls, the theme
+
+mockup/
+  index.html, styles.css    the browser version this app is drawn from
+  src/                      its player, record and tracklist
 ```
 
 Three parts matter.

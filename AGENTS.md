@@ -4,11 +4,11 @@ A lo-fi mix player. Two builds live here, and they share one tracklist.
 
 | Path | What it is | State |
 | --- | --- | --- |
-| `index.html`, `styles.css`, `src/` | Browser version. Synthesizes its own audio. | Working, reference for the design |
-| `desktop/` | MyGo 0.7.4 native tray app. No webview. | Working, in active development |
+| `mockup/` | Browser mockup: `index.html`, `styles.css`, `src/`. Synthesizes its own audio. | Working, design reference |
+| `desktop/` | MyGo 0.7.4 native tray app. No webview. | The product |
 
-The desktop app is the product. The browser version is the design reference and
-the place where a look is tried first, because it can be screenshotted.
+The desktop app is the product. `mockup/` is where a look is tried first,
+because a browser can be screenshotted and the native app cannot.
 
 ## Read this first
 

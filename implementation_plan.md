@@ -82,7 +82,7 @@ tracklist is shown greyed out, and one line explains it with a single button:
 "Choose your mix file". One click, a native file dialog, and it plays.
 No silent stand-in pretending to be the tracklist.
 
-Chapters come from `src/mix.js`, exported once to `desktop/internal/mix/tracks.go`
+Chapters come from `mockup/src/mix.js`, exported once to `desktop/internal/mix/tracks.go`
 as offsets, artist and title. No audio, just numbers and names.
 
 Formats, checked against the package source, not assumed:
