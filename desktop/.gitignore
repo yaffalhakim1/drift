@@ -1,0 +1,4 @@
+# build artifacts and local previews
+drift-dev.exe
+*.exe
+internal/view/preview-*.png
