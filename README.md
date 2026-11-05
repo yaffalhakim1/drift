@@ -5,6 +5,8 @@ A lo-fi mix player that lives in the Windows system tray.
 Click the tray icon. A small popup opens with a record on it. Press play. Close
 the popup and the music keeps going.
 
+[**yaffalhakim1.github.io/drift**](https://yaffalhakim1.github.io/drift/) is the page for it.
+
 <img src="docs/screenshots/popup-dark.png" width="320" alt="The drift popup in dark mode, showing a record, the chapter title, a seek bar and the tracklist">
 <img src="docs/screenshots/popup-light.png" width="320" alt="The same popup in light mode">
 
