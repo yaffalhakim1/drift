@@ -4,12 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>drift, a record player for your Windows system tray</title>
-<meta name="description" content="drift plays one long mix from your own disk and cuts it into 28 chapters, so the title follows the music. A 3.4 MB Windows tray app with no browser engine inside. Free, MIT licensed.">
+<meta name="description" content="drift plays a folder of songs, or one long mix cut into 28 chapters, from your own disk. It names each track as it plays. A 3.4 MB Windows tray app with no browser engine inside. Free, MIT licensed.">
 <link rel="canonical" href="https://yaffalhakim1.github.io/drift/">
 
 <meta property="og:type" content="website">
 <meta property="og:title" content="drift, a record player for your Windows system tray">
-<meta property="og:description" content="One long mix from your own disk, cut into 28 chapters. Close the popup and the music keeps going.">
+<meta property="og:description" content="A folder of songs or one long mix, from your own disk. Close the popup and the music keeps going.">
 <meta property="og:url" content="https://yaffalhakim1.github.io/drift/">
 <meta property="og:image" content="https://yaffalhakim1.github.io/drift/screenshots/popup-dark.png">
 <meta property="og:image:alt" content="The drift popup: a turning record with a cream label, the chapter title Owls of the Night by Kupla, a seek bar, and the chapter list below.">
@@ -38,7 +38,7 @@
   "name": "drift",
   "applicationCategory": "MultimediaApplication",
   "operatingSystem": "Windows 10, Windows 11",
-  "description": "A mix player for the Windows system tray. It streams one recording from disk and marks 28 chapters along it.",
+  "description": "A music player for the Windows system tray. It plays a folder of songs in order, or one recording marked with 28 chapters.",
   "url": "https://yaffalhakim1.github.io/drift/",
   "downloadUrl": "https://github.com/yaffalhakim1/drift/releases/download/v0.1.0/drift-setup-0.1.0-amd64.exe",
   "softwareVersion": "0.1.0",
@@ -568,7 +568,7 @@ summary:focus-visible {
   color: var(--text);
 }
 /* the unit sits on the same line as the figure, one space away; a bare margin
-   glued "28" to "chapters" and read as a typo */
+   glued the figure to its unit and read as a typo */
 .figure-value small {
   font-size: 16px;
   line-height: 24px;
@@ -984,9 +984,8 @@ footer {
         <h1 class="heading-1 rise rise-2">A record player for your system tray</h1>
 
         <p class="hero-sub rise rise-3">
-          drift plays one long mix from your own disk and cuts it into 28 chapters,
-          so the title always follows the music. No browser, no account, nothing to
-          download but the app.
+          drift plays a folder of songs from your own disk and names each
+          track as it plays. No browser, no account.
         </p>
 
         <div class="cta-row rise rise-4">
@@ -1017,8 +1016,8 @@ footer {
     <div class="wrap">
       <ul class="figure-grid reveal" role="list">
         <li>
-          <span class="figure-value">28<small>chapters</small></span>
-          <span class="figure-label">One marker for each stop on the tracklist</span>
+          <span class="figure-value">2<small>ways to listen</small></span>
+          <span class="figure-label">A folder of songs, or one long mix with chapters</span>
         </li>
         <li>
           <span class="figure-value">320<small>by 585</small></span>
@@ -1094,7 +1093,7 @@ footer {
     <div class="wrap">
       <div class="section-head reveal">
         <h2 class="heading-2">Three steps, then it is out of the way</h2>
-        <p>The first run asks for your recording once. Later runs open it before you ask.</p>
+        <p>The first run asks where your music lives. Later runs open it before you ask.</p>
       </div>
 
       <ol class="steps" role="list">
@@ -1103,12 +1102,12 @@ footer {
           <p>Run the installer. drift starts with no window at all. Click the record icon in the tray and the panel drops down.</p>
         </li>
         <li class="step reveal">
-          <h3 class="heading-5">Point it at your mix</h3>
-          <p>Choose one audio file. The app takes a single recording, not a folder, and remembers the path for the next time.</p>
+          <h3 class="heading-5">Point it at your music</h3>
+          <p>Choose a folder of songs and it plays them in order, naming each from its file. Or choose one long recording and its chapters take over. Either way, drift remembers for the next time.</p>
         </li>
         <li class="step reveal">
           <h3 class="heading-5">Press play, close the panel</h3>
-          <p>The music carries on in the tray. Right click the icon for play, pause, next chapter, or quit.</p>
+          <p>The music carries on in the tray. When a song ends the next one starts. Right click the icon for play, pause, next track, or quit.</p>
         </li>
       </ol>
     </div>
@@ -1179,7 +1178,7 @@ footer {
           <span class="not-mark" aria-hidden="true"></span>
           <div>
             <h3 class="title-3">It does not download music</h3>
-            <p>There is no catalogue, no search and no streaming service behind it. You supply the recording.</p>
+            <p>There is no catalogue, no search and no streaming service behind it. You supply the songs or the recording.</p>
           </div>
         </article>
 
@@ -1187,7 +1186,7 @@ footer {
           <span class="not-mark" aria-hidden="true"></span>
           <div>
             <h3 class="title-3">It ships no audio</h3>
-            <p>The recording belongs to the artists in it. drift carries the tracklist, not the music.</p>
+            <p>The songs belong to the artists who made them. drift carries the player, not the music.</p>
           </div>
         </article>
 
@@ -1203,7 +1202,7 @@ footer {
           <span class="not-mark" aria-hidden="true"></span>
           <div>
             <h3 class="title-3">It does not sync anywhere</h3>
-            <p>No account, no cloud, no library. Your mix stays on the machine you chose it on.</p>
+            <p>No account, no cloud, no library. Your music stays on the machine you chose it on.</p>
           </div>
         </article>
       </div>
@@ -1238,8 +1237,13 @@ footer {
         </details>
 
         <details>
-          <summary>Will it find my mix next time?</summary>
-          <p>Yes. The path is saved when you open a file, and the app tries it at startup. If the file has moved or gone, drift opens with the empty state and asks you to choose again.</p>
+          <summary>Will it find my music next time?</summary>
+          <p>Yes. A chosen folder or file is saved when you open it, and the app tries it at startup. A folder is re-scanned, so songs you added show up. If the folder has gone, or the file has moved, drift opens with the empty state and asks you to choose again.</p>
+        </details>
+
+        <details>
+          <summary>Folder of songs or one long mix?</summary>
+          <p>Both work, and the app opens what you last picked. A folder plays its MP3s in order, naming each from its filename, and moves on when a song ends. A single recording keeps the chapter list.</p>
         </details>
 
         <details>
@@ -1268,7 +1272,7 @@ footer {
   <section class="final">
     <div class="wrap">
       <h2 class="heading-2 reveal">Put the record in the tray</h2>
-      <p class="reveal">One download, one mix file, and the rest of the afternoon.</p>
+      <p class="reveal">One download, one folder of songs, and the rest of the afternoon.</p>
       <div class="cta-row reveal">
         <a class="btn btn-key btn-lg" href="https://github.com/yaffalhakim1/drift/releases/download/v0.1.0/drift-setup-0.1.0-amd64.exe">
           Download for Windows
@@ -1285,7 +1289,7 @@ footer {
     <p class="footer-note">
       drift is free software under the MIT licence. It has no account and sends
       no usage data. The music named in the screenshots belongs to the artists
-      in the tracklist, not to this project.
+      who made it, not to this project.
     </p>
     <ul class="footer-links" role="list">
       <li><a href="https://github.com/yaffalhakim1/drift">GitHub</a></li>

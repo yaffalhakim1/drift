@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="A plain-English study path for the drift Go codebase: seven Go ideas, one lock, the immediate-mode UI mindset, and the order to read the files.">
+<meta name="description" content="A plain-English study path for the drift Go codebase: eight Go ideas, one lock, the immediate-mode UI mindset, and the order to read the files.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&display=swap">
@@ -349,7 +349,7 @@ footer {
 <header class="mast">
   <div class="wrap">
     <h1>Learn Go in one real codebase</h1>
-    <p class="lede">drift is a Go music tray app, about 1,000 lines.</p>
+    <p class="lede">drift plays folders of songs, and one long mix, from your own disk.</p>
     <p><a class="cta" href="#basics">Start with the seven ideas</a></p>
     <ul class="toc">
       <li><a href="#map">The map</a></li>
@@ -358,6 +358,7 @@ footer {
       <li><a href="#immediate">The UI mindset</a></li>
       <li><a href="#order">Reading order</a></li>
       <li><a href="#fix">When something breaks</a></li>
+      <li><a href="#test">Testing</a></li>
     </ul>
   </div>
 </header>
@@ -370,17 +371,16 @@ footer {
   <p class="sub">Three packages, one direction of data flow. Keep this picture in your head; every file below hangs off it.</p>
 
   <div class="map">
-    <div class="node hub"><strong>main.go</strong><span>Owns everything. Tray icon, popup window, file picker, saved theme.</span></div>
-    <div class="node"><strong>internal/player</strong><span>Plays the file. Open, play, pause, seek, volume. Outlives the popup, so music keeps going.</span></div>
-    <div class="node"><strong>internal/mix</strong><span>Pure data. The 28 chapter names and their start times. No audio here.</span></div>
+    <div class="node hub"><strong>main.go</strong><span>Owns everything. Tray icon, popup window, pickers, saved theme and folder.</span></div>
+    <div class="node"><strong>internal/player</strong><span>Plays the file, or a folder of songs in order. Outlives the popup, so music keeps going.</span></div>
+    <div class="node"><strong>internal/mix</strong><span>Pure data. The 28 chapter names and their start times for the single-mix mode. No audio here.</span></div>
   </div>
   <div class="map" style="margin-top:-0.6rem">
     <div class="arrow">owns ↓</div>
     <div class="arrow">reads ↓</div>
     <div class="arrow">searched by ↓</div>
-  </div>
-  <div class="map" style="margin-top:-0.6rem">
-    <div class="node"><strong>internal/view</strong><span>Draws the popup. Rebuilt from scratch every frame. Holds no state of its own.</span></div>
+  </div>  <div class="map" style="margin-top:-0.6rem">
+    <div class="node"><strong>internal/view</strong><span>Draws the popup. Rebuilt from scratch every frame. The list is ui.List, a virtual list, in queue mode.</span></div>
   </div>
 
   <p>The word <code>internal</code> is a Go rule, not a naming choice: code under <code>internal/</code> can only be imported by this repo. That is what keeps the layers from leaking into each other.</p>
@@ -568,11 +568,11 @@ glyph := <span class="k">map</span>[<span class="k">string</span>]<span class="k
   <ol class="path">
     <li><strong>mix/tracks.go</strong><p>95 lines, pure Go, no framework. Structs, slices, a binary search. Finish this and ideas 1, 2, 5 and 8 are yours.</p></li>
     <li><strong>view/theme.go</strong><p>34 lines. Your first look at the <code>ui</code> package. It also explains why the light blue is darker than the dark blue: contrast rules.</p></li>
-    <li><strong>player/player.go</strong><p>Errors, locks, callbacks. This is where Go starts feeling like Go.</p></li>
+    <li><strong>player/player.go</strong><p>Errors, locks, callbacks, and now the folder queue. This is where Go starts feeling like Go.</p></li>
   </ol>
   <ol class="path" start="4">
-    <li><strong>main.go</strong><p>How the pieces get wired: tray, popup, file picker, saved theme. Notice how little it does itself. It connects things.</p></li>
-    <li><strong>view/view.go</strong><p>Immediate-mode UI in full. Read this last, after the mindset section above.</p></li>
+    <li><strong>main.go</strong><p>How the pieces get wired: tray, popup, the two pickers, saved theme and folder. Notice how little it does itself. It connects things.</p></li>
+    <li><strong>view/view.go</strong><p>Immediate-mode UI in full, with the virtual <code>ui.List</code> for the queue. Read this last, after the mindset section above.</p></li>
   </ol>
 
   <p>Then skim the tests: <code>player_test.go</code> and <code>screen_test.go</code>. Tests show what the code is supposed to do, better than comments do.</p>
@@ -592,8 +592,10 @@ go test ./...</code></pre>
     <tbody>
       <tr><td>No tray icon, popup never opens</td><td><code>main.go</code>, <code>ready()</code></td></tr>
       <tr><td>No sound, seek jumps</td><td><code>player/player.go</code></td></tr>
+      <tr><td>Wrong song title in queue mode</td><td><code>parseQueueName</code> in <code>player.go</code></td></tr>
       <tr><td>Wrong chapter title</td><td><code>mix/tracks.go</code></td></tr>
       <tr><td>List will not scroll</td><td><code>view.go</code> <code>scrollHeight()</code></td></tr>
+      <tr><td>Queue does not advance</td><td><code>onTrackEnd</code> in <code>player.go</code></td></tr>
       <tr><td>Record or bars stutter</td><td><code>view.go</code>, use <code>el.Loop</code></td></tr>
       <tr><td>Wrong colours</td><td><code>view/theme.go</code></td></tr>
       <tr><td>AAC refuses to play</td><td>On purpose, the decoder cannot read it</td></tr>
@@ -609,15 +611,15 @@ go test ./...</code></pre>
   <div class="cards two">
     <div class="card">
       <h3>Unit tests</h3>
-      <p>Fast, no audio file needed. Run them first.</p>
+      <p>Fast, no audio needed. Run them first.</p>
       <pre><code>cd desktop
 go test ./...</code></pre>
     </div>
     <div class="card">
-      <h3>With the real recording</h3>
-      <p>Point <code>DRIFT_MIX</code> at your mp3. The streaming and chapter tests then use it.</p>
+      <h3>With your real music</h3>
+      <p>Point <code>DRIFT_MIX</code> at your lo-fi recording, or <code>DRIFT_FOLDER</code> at a folder of mp3s. The screen and queue tests then use them.</p>
       <pre><code><span class="c"># PowerShell</span>
-$env:DRIFT_MIX = "C:\path\to\your-mix.mp3"
+$env:DRIFT_FOLDER = "C:\path\to\your-songs"
 go test ./...</code></pre>
     </div>
   </div>
