@@ -19,6 +19,11 @@ type Model struct {
 	// Scroll keeps the chapter list where the user left it between frames.
 	Scroll *ui.ScrollState
 
+	// List keeps the queue list's place. Its fields (Key, Label, Selected)
+	// are set before building, per docs/ui/views.md: state lives in the
+	// app, never in the view.
+	List *ui.ListState
+
 	// Angle turns the plate, in degrees.
 	Angle *float32
 
@@ -28,6 +33,14 @@ type Model struct {
 
 	// Choose asks the user for a recording, from the empty state.
 	Choose func()
+
+	// The queue list's chosen row. Lives in the model, pointed at by the
+	// ListState; -1 is none.
+	listSelection int
+
+	// following is the track index the list last scrolled to, so the view
+	// scrolls only when the playing song changes, not on every frame.
+	following int
 
 	// Theme is the appearance the user picked: "system", "light" or "dark".
 	Theme string
@@ -178,8 +191,8 @@ func themeGlyph(p *ui.Painter, r ui.Rect, kind string, col, bg ui.Color) {
 func plateSection(c *ui.Context, m *Model, st player.State) {
 	el := ui.Box(c).Width(148).Height(148).AlignSelf(ui.Center).MarginY(10)
 
-	title := ""
-	if st.Chapter >= 0 && st.Chapter < len(mix.Chapters) {
+	title := queueTitle(st)
+	if !st.Queue && st.Chapter >= 0 && st.Chapter < len(mix.Chapters) {
 		title = mix.Chapters[st.Chapter].Name()
 	}
 	pal := PaletteFor(c.Theme())
@@ -194,9 +207,22 @@ func plateSection(c *ui.Context, m *Model, st player.State) {
 	})
 }
 
+// queueTitle is what the plate and the meta line show in queue mode: the
+// song's title, or a placeholder while nothing plays.
+func queueTitle(st player.State) string {
+	if st.Title != "" {
+		return st.Title
+	}
+	return "Nothing playing"
+}
+
 // trackMeta is the chapter title and its artist.
 func trackMeta(c *ui.Context, t *ui.Theme, st player.State) {
-	ch := mix.Chapters[st.Chapter]
+	title, artist := queueTitle(st), st.Artist
+	if !st.Queue {
+		ch := mix.Chapters[st.Chapter]
+		title, artist = ch.Name(), ch.Artist
+	}
 
 	ui.Column(c).Gap(2).Children(func() {
 		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
@@ -208,9 +234,9 @@ func trackMeta(c *ui.Context, t *ui.Theme, st player.State) {
 			ui.Text(c, "NOW PLAYING").FontSize(9.5).LetterSpacing(1.4).TextColor(t.TextMuted)
 		})
 
-		ui.Text(c, ch.Name()).FontSize(20).FontWeight(600).MaxLines(1).TextColor(t.Text)
-		if ch.Artist != "" {
-			ui.Text(c, ch.Artist).FontSize(11.5).MaxLines(1).TextColor(t.TextMuted)
+		ui.Text(c, title).FontSize(20).FontWeight(600).MaxLines(1).TextColor(t.Text)
+		if artist != "" {
+			ui.Text(c, artist).FontSize(11.5).MaxLines(1).TextColor(t.TextMuted)
 		}
 	})
 }
@@ -254,11 +280,20 @@ func transport(c *ui.Context, m *Model, st player.State) {
 
 // chapterList is the tracklist: the only part that scrolls.
 //
+// Recording mode keeps the fixed chapter rows in a Scroll. Queue mode uses
+// ui.List, a virtual list: it builds only the rows in view, so a folder of
+// 207 songs costs the same as one of 20 (docs/ui/list.md).
+//
 // Height must be set explicitly. Grow(1) alone lets the list take its
 // content's height, so it never overflows and never scrolls: the content has
 // to be taller than a bounded box for a scroll offset to exist.
 func chapterList(c *ui.Context, t *ui.Theme, m *Model, st player.State) {
 	ui.Box(c).Width(288).Height(1).MarginY(8).Background(t.Border)
+
+	if st.Queue {
+		queueList(c, t, m, st)
+		return
+	}
 
 	list := ui.Scroll(c).Width(288).Height(scrollHeight(c))
 	list.TrackScroll(m.Scroll)
@@ -267,6 +302,77 @@ func chapterList(c *ui.Context, t *ui.Theme, m *Model, st player.State) {
 		for i := range mix.Chapters {
 			chapterRow(c, t, m, st, i)
 		}
+	})
+}
+
+// queueList renders the folder's songs through ui.List. The ListState comes
+// from the app: per docs/ui/views.md, widget state belongs in app state,
+// and its fields are set before the list is built each frame.
+func queueList(c *ui.Context, t *ui.Theme, m *Model, st player.State) {
+	tracks := m.Player.Tracks()
+	if m.List == nil {
+		return
+	}
+	ls := m.List
+	ls.Key = func(i int) any { return tracks[i].Path }
+	ls.Label = func(i int) string {
+		if tracks[i].Artist != "" {
+			return tracks[i].Title + " — " + tracks[i].Artist
+		}
+		return tracks[i].Title
+	}
+	ls.Selected = &m.listSelection
+
+	// Follow the playing song: when it changes (auto-advance, next), keep
+	// it in view. The list answers ScrollIntoView on its next layout, and
+	// Visible reads back where it landed, per docs/ui/list.md.
+	if i := m.Player.CurrentTrack(); i != m.following {
+		m.following = i
+		if m.List != nil {
+			m.List.ScrollIntoView(i)
+		}
+	}
+
+	// The list reports a new choice through its element's Changed, so the
+	// model hears of it once, whether it came from a click or the arrow keys.
+	list := ui.List(c, ls, len(tracks), func(i int) {
+		active := i == st.Chapter
+		row := ui.Row(c).AlignItems(ui.Center).Height(40).Gap(8).PaddingX(6).Radius(8).
+			Width(276)
+		switch {
+		case active:
+			row.Background(fade(t.Accent, 0.10))
+		case row.Hovered():
+			row.Background(t.SurfaceHover)
+		}
+		row.Children(func() {
+			col := t.TextMuted
+			if active {
+				col = t.Text
+			}
+			ui.Text(c, ls.Label(i)).FontSize(12.5).MaxLines(1).TextColor(col).Grow(1)
+			if active && st.Playing {
+				drawQueueBars(c, t, m)
+			}
+		})
+	}).Width(288).Height(scrollHeight(c)).Gap(2).Padding(4, 2)
+
+	if list.Changed() && ls.Selected != nil && *ls.Selected >= 0 && *ls.Selected < len(tracks) {
+		m.Player.JumpTo(*ls.Selected)
+	}
+}
+
+// drawQueueBars draws the three-bar playing marker inside the active row.
+// It uses Loop, as the disc does, so the frames keep coming (loop_test.go
+// pins the lesson: no manual repaint requests).
+func drawQueueBars(c *ui.Context, t *ui.Theme, m *Model) {
+	num := ui.Box(c).Size(20, 16)
+	var phase float32
+	if !c.Preferences().ReduceMotion {
+		phase = num.Loop("bars", 1100*time.Millisecond, ui.Linear)
+	}
+	num.Draw(func(p *ui.Painter, r ui.Rect) {
+		drawBars(p, r, t.Accent, phase)
 	})
 }
 

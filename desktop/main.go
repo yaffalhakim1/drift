@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -29,11 +30,16 @@ type app struct {
 	angle  float32
 	last   time.Time
 
+	// The queue list's place, kept across frames in queue mode.
+	list ui.ListState
+
 	// theme is "system", "light" or "dark", as the user last chose.
 	theme string
 
 	// settingsPath is where the theme is remembered.
+	// folderPath remembers the chosen folder of songs.
 	settingsPath string
+	folderPath   string
 }
 
 // model is the state the screen renders from, rebuilt each frame because
@@ -44,6 +50,7 @@ func (a *app) model() *view.Model {
 		Scroll:  &a.scroll,
 		Angle:   &a.angle,
 		Last:    &a.last,
+		List:    &a.list,
 		Theme:   a.theme,
 		Choose:  a.choose,
 		OnTheme: a.setTheme,
@@ -121,6 +128,35 @@ func (a *app) choose() {
 		return
 	}
 	a.player.Play()
+	a.player.Forget() // one source wins: the recording, not an old folder
+	// Clear the folder memory too, on disk: a stale last-folder would
+	// otherwise come back over this recording on the next launch.
+	a.folderPath = ""
+	a.saveFolder()
+}
+
+// chooseFolder asks for a folder of songs and plays it in order.
+func (a *app) chooseFolder() {
+	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
+		Title:       "Choose a folder of music",
+		ButtonLabel: "Play this folder",
+		Directory:   true,
+	})
+	if err != nil || len(paths) == 0 {
+		return
+	}
+	dir := paths[0]
+	files, err := player.FolderTracks(dir)
+	if err != nil {
+		mygo.Dialog.Error("Cannot use that folder", err.Error())
+		return
+	}
+	if err := a.player.OpenQueue(files); err != nil {
+		mygo.Dialog.Error("Cannot play that folder", err.Error())
+		return
+	}
+	a.folderPath = dir
+	a.saveFolder()
 }
 
 // saveSettings remembers the theme beside the recording path.
@@ -130,6 +166,34 @@ func (a *app) saveSettings() {
 	}
 	_ = os.MkdirAll(filepath.Dir(a.settingsPath), 0o755)
 	_ = os.WriteFile(a.settingsPath, []byte(a.theme+"\n"), 0o644)
+}
+
+// saveFolder remembers the folder of songs for the next run.
+func (a *app) saveFolder() {
+	if a.settingsPath == "" {
+		return
+	}
+	_ = os.WriteFile(filepath.Join(filepath.Dir(a.settingsPath), "last-folder"), []byte(a.folderPath+"\n"), 0o644)
+}
+
+// loadFolder reads the folder chosen last time. A folder that went away,
+// or that now has no songs, is dropped rather than offered.
+func (a *app) loadFolder() string {
+	if a.settingsPath == "" {
+		return ""
+	}
+	b, err := os.ReadFile(filepath.Join(filepath.Dir(a.settingsPath), "last-folder"))
+	if err != nil {
+		return ""
+	}
+	dir := strings.TrimSpace(string(b))
+	if dir == "" {
+		return ""
+	}
+	if files, err := player.FolderTracks(dir); err != nil || len(files) == 0 {
+		return ""
+	}
+	return dir
 }
 
 // loadSettings reads the theme chosen last time, defaulting to the system.
@@ -148,8 +212,8 @@ func (a *app) loadSettings() {
 	}
 }
 
-// ready builds the tray, loads the recording chosen last time, and wires the
-// menu. It runs once the app is up.
+// ready builds the tray, loads what played last time, and wires the menu.
+// It runs once the app is up.
 func (a *app) ready() {
 	dataDir, err := mygo.App.Path(mygo.PathUserData)
 	var lastPath string
@@ -158,14 +222,25 @@ func (a *app) ready() {
 		a.settingsPath = filepath.Join(dataDir, "settings")
 	}
 	a.loadSettings()
+
+	// One source wins: a remembered folder beats a remembered recording.
+	folder := a.loadFolder()
+	a.folderPath = folder
 	a.player = player.New(lastPath)
 
 	// Apply the saved appearance before anything draws.
 	a.setTheme(a.theme)
 
-	// Open the recording from the previous run, so the popup has something to
-	// show the first time it opens.
-	if p := a.player.RememberedPath(); p != "" {
+	if folder != "" {
+		files, err := player.FolderTracks(folder)
+		if err == nil {
+			if err := a.player.OpenQueue(files); err != nil {
+				log.Println("folder from last time could not be opened:", err)
+			}
+		}
+	} else if p := a.player.RememberedPath(); p != "" {
+		// Open the recording from the previous run, so the popup has
+		// something to show the first time it opens.
 		if err := a.player.Open(p); err != nil {
 			log.Println("recording from last time could not be opened:", err)
 		}
@@ -184,6 +259,7 @@ func (a *app) ready() {
 	menu := mygo.NewMenu([]*mygo.MenuItem{
 		{Label: "Open drift", Click: func(*mygo.MenuItem, *mygo.Window) { a.toggle() }},
 		{Label: "Choose mix…", Click: func(*mygo.MenuItem, *mygo.Window) { a.choose() }},
+		{Label: "Choose folder of music…", Click: func(*mygo.MenuItem, *mygo.Window) { a.chooseFolder() }},
 		mygo.Separator(),
 		{Label: "Play or pause", Click: func(*mygo.MenuItem, *mygo.Window) { a.player.Toggle() }},
 		{Label: "Next chapter", Click: func(*mygo.MenuItem, *mygo.Window) { a.player.Next() }},

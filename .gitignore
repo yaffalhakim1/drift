@@ -3,6 +3,9 @@ desktop/dist/
 desktop/drift-dev.exe
 *.exe
 
+# browser mockup, never committed
+mockup/
+
 # preview renders
 desktop/internal/view/preview-*.png
 desktop/internal/view/popup-*.png
@@ -18,3 +21,4 @@ mix.*
 .idea/
 .DS_Store
 Thumbs.db
+downloads/
