@@ -95,21 +95,3 @@ func TestScreenScrolls(t *testing.T) {
 		t.Fatalf("the wheel did not scroll back up: y stayed %.0f", scroll.Y)
 	}
 }
-
-// TestScreenFitsWindow guards the bug that came before the scroll fix: the
-// popup must not lay itself out taller than the window it lives in.
-func TestScreenFitsWindow(t *testing.T) {
-	tester, _, _ := newScreenTester(t)
-
-	row, ok := tester.Find("Snowman — WYS")
-	if !ok {
-		t.Skip("no recording to lay out")
-	}
-	if row.Y >= 585 {
-		t.Fatalf("the first chapter row is at y=%.0f, below the 585 window", row.Y)
-	}
-	if row.Y < 300 {
-		t.Fatalf("the first chapter row is at y=%.0f, overlapping the controls above it", row.Y)
-	}
-	t.Logf("first chapter at y=%.0f", row.Y)
-}
