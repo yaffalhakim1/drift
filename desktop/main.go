@@ -30,8 +30,11 @@ type app struct {
 	angle  float32
 	last   time.Time
 
-	// The queue list's place, kept across frames in queue mode.
-	list ui.ListState
+	// The queue list's place and its chosen row, kept between frames in
+	// app state (docs/ui/views.md: widget state belongs in the app).
+	list   ui.ListState
+	sel    int
+	follow int
 
 	// theme is "system", "light" or "dark", as the user last chose.
 	theme string
@@ -46,17 +49,19 @@ type app struct {
 // elements do not survive between frames but the callbacks do.
 func (a *app) model() *view.Model {
 	return &view.Model{
-		Player:  a.player,
-		Scroll:  &a.scroll,
-		Angle:   &a.angle,
-		Last:    &a.last,
-		List:    &a.list,
-		Theme:   a.theme,
-		Choose:  a.choose,
-		OnTheme: a.setTheme,
-		OnPlay:  a.player.Toggle,
-		OnPrev:  a.player.Prev,
-		OnNext:  a.player.Next,
+		Player:        a.player,
+		Scroll:        &a.scroll,
+		Angle:         &a.angle,
+		Last:          &a.last,
+		List:          &a.list,
+		ListSelection: a.sel,
+		Following:     a.follow,
+		Theme:         a.theme,
+		Choose:        a.choose,
+		OnTheme:       a.setTheme,
+		OnPlay:        a.player.Toggle,
+		OnPrev:        a.player.Prev,
+		OnNext:        a.player.Next,
 		OnSeek: func(f float64) {
 			st := a.player.State()
 			a.player.Seek(time.Duration(float64(st.Total) * f))

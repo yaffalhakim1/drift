@@ -75,6 +75,61 @@ func TestQueueScreenLaysOut(t *testing.T) {
 	t.Logf("first of %d tracks at y=%.0f: %q", len(tr), row.Y, first)
 }
 
+// TestQueueScreenScrollsWhilePlaying is the regression test for the locked
+// list: while a song plays, the user must be able to scroll away and stay
+// there. The follow must fire only when the playing track changes, never
+// on every frame.
+func TestQueueScreenScrollsWhilePlaying(t *testing.T) {
+	tester, p, m := queueScreenTester(t)
+
+	tr := p.Tracks()
+	if len(tr) < 12 {
+		t.Skip("need a dozen tracks to see the window move")
+	}
+	tester.Frame()
+	tester.Frame()
+
+	// The list starts near the top, following track 0.
+	first, _ := m.List.Visible()
+	if first > 2 {
+		t.Fatalf("list starts away from the top: first=%d", first)
+	}
+
+	// The user scrolls away while the music plays. ScrollIntoView is the
+	// documented programmatic scroll; it writes through the same window
+	// the wheel moves, without touching the player.
+	m.List.ScrollIntoView(40)
+	tester.Frame()
+	tester.Frame()
+
+	away, _ := m.List.Visible()
+	if away < 30 {
+		t.Fatalf("scroll away did not stick: first=%d", away)
+	}
+
+	// Frames pass, the song still plays: the list must stay where the
+	// user put it. Before the fix the follow re-fired every frame here.
+	for i := 0; i < 5; i++ {
+		tester.Advance(50 * time.Millisecond)
+		tester.Frame()
+	}
+	still, _ := m.List.Visible()
+	if still != away {
+		t.Fatalf("the list drifted back while playing: %d -> %d", away, still)
+	}
+
+	// Then the song changes: the follow chases again. That is the whole
+	// behaviour: free while the song lasts, following on a change.
+	p.JumpTo(len(tr) - 1)
+	tester.Frame()
+	tester.Frame()
+	f, _ := m.List.Visible()
+	if f < len(tr)-4 {
+		t.Fatalf("the list did not follow the new song: first=%d, want near %d", f, len(tr)-1)
+	}
+	t.Logf("scroll away held at %d across 5 frames, then followed to %d", still, f)
+}
+
 // TestQueueScreenFollowsPlaying proves the list follows the song: jump to
 // the last track through the player and the list scrolls it into view on
 // its own, without a wheel or a programmatic ScrollIntoView from the test.
