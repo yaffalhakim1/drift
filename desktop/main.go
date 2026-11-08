@@ -32,9 +32,9 @@ type app struct {
 
 	// The queue list's place and its chosen row, kept between frames in
 	// app state (docs/ui/views.md: widget state belongs in the app).
-	list   ui.ListState
-	sel    int
-	follow int
+	// sel IS the playing track: the list shows one choice, never two.
+	list ui.ListState
+	sel  int
 
 	// theme is "system", "light" or "dark", as the user last chose.
 	theme string
@@ -54,8 +54,7 @@ func (a *app) model() *view.Model {
 		Angle:         &a.angle,
 		Last:          &a.last,
 		List:          &a.list,
-		ListSelection: a.sel,
-		Following:     a.follow,
+		ListSelection: &a.sel, // pointer into app state
 		Theme:         a.theme,
 		Choose:        a.choose,
 		OnTheme:       a.setTheme,

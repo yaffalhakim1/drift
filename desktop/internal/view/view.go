@@ -34,14 +34,9 @@ type Model struct {
 	// Choose asks the user for a recording, from the empty state.
 	Choose func()
 
-	// The queue list's chosen row. Pointed at by the ListState; -1 is none.
-	ListSelection int
-
-	// Following is the track index the list last scrolled to. It must live
-	// in app state: the Model is rebuilt every frame, so anything held only
-	// in the model is forgotten, and the follow fired every frame, which
-	// pinned the list to the playing row and stopped scrolling.
-	Following int
+	// The queue list's chosen row, owned by the app through the pointer.
+	// It mirrors the playing track: one state, never two.
+	ListSelection *int
 
 	// Theme is the appearance the user picked: "system", "light" or "dark".
 	Theme string
@@ -322,17 +317,21 @@ func queueList(c *ui.Context, t *ui.Theme, m *Model, st player.State) {
 		}
 		return tracks[i].Title
 	}
-	ls.Selected = &m.ListSelection
+	ls.Selected = m.ListSelection
 
-	// Follow the playing song: when it changes (auto-advance, next), keep
-	// it in view. m.Following lives in app state, so this fires once per
-	// track change, not on every frame: the user can scroll away freely,
-	// and the list chases again only when the song itself changes.
-	if i := m.Player.CurrentTrack(); i != m.Following {
-		m.Following = i
-		if m.List != nil {
-			m.List.ScrollIntoView(i)
-		}
+	// One state: the list's choice is the playing track, written from the
+	// player every frame. ScrollIntoView fires only when the two differed,
+	// which happens exactly when the song changed — auto-advance, next,
+	// prev, or a click elsewhere in the list. Scrolling never moves the
+	// choice, so the user can scroll away and stay there until the next
+	// song starts.
+	playing := m.Player.CurrentTrack()
+	changed := ls.Selected != nil && *ls.Selected != playing
+	if ls.Selected != nil {
+		*ls.Selected = playing
+	}
+	if changed && m.List != nil {
+		m.List.ScrollIntoView(playing)
 	}
 
 	// The list reports a new choice through its element's Changed, so the
@@ -361,7 +360,6 @@ func queueList(c *ui.Context, t *ui.Theme, m *Model, st player.State) {
 
 	if list.Changed() && ls.Selected != nil && *ls.Selected >= 0 && *ls.Selected < len(tracks) {
 		m.Player.JumpTo(*ls.Selected)
-		m.ListSelection = *ls.Selected
 	}
 }
 

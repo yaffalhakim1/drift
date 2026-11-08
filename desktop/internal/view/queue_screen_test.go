@@ -32,10 +32,12 @@ func queueScreenTester(t *testing.T) (*ui.Tester, *player.Player, *Model) {
 
 	var scroll ui.ScrollState
 	var list ui.ListState
+	sel := -1 // app-owned choice; the view drives it from the player
 	angle := float32(0)
 	last := time.Now()
 	m := &Model{
-		Player: p, Scroll: &scroll, List: &list, Angle: &angle, Last: &last,
+		Player: p, Scroll: &scroll, List: &list, ListSelection: &sel,
+		Angle: &angle, Last: &last,
 		Choose: func() {}, OnPlay: func() {}, OnPrev: func() {},
 		OnNext: func() {}, OnSeek: func(float64) {},
 	}
@@ -75,30 +77,62 @@ func TestQueueScreenLaysOut(t *testing.T) {
 	t.Logf("first of %d tracks at y=%.0f: %q", len(tr), row.Y, first)
 }
 
-// TestQueueScreenScrollsWhilePlaying is the regression test for the locked
-// list: while a song plays, the user must be able to scroll away and stay
-// there. The follow must fire only when the playing track changes, never
-// on every frame.
-func TestQueueScreenScrollsWhilePlaying(t *testing.T) {
+// TestQueueLifecycle is the thorough regression test for the two queue-list
+// bugs. It walks the exact sequence the user hit:
+//
+//  1. Play from row 0. The list's one choice IS the playing track; no
+//     second, stale row may look chosen.
+//  2. The first song ends, the player auto-advances to row 1. This is
+//     where the list used to lock: the app passes its state by pointer,
+//     and a previous version passed a copy, so every frame re-fired the
+//     follow and the wheel could never win.
+//  3. The user scrolls away mid-song and stays there.
+//  4. The song changes again: the list chases.
+//
+// The construction goes through a pointer into test-owned state, the same
+// shape main.go hands the view. A test that built the Model differently
+// is what let the copy bug through.
+func TestQueueLifecycle(t *testing.T) {
 	tester, p, m := queueScreenTester(t)
 
 	tr := p.Tracks()
 	if len(tr) < 12 {
 		t.Skip("need a dozen tracks to see the window move")
 	}
-	tester.Frame()
-	tester.Frame()
 
-	// The list starts near the top, following track 0.
-	first, _ := m.List.Visible()
-	if first > 2 {
-		t.Fatalf("list starts away from the top: first=%d", first)
+	// --- 1. Track 0 playing: one choice, at the top.
+	if got := p.CurrentTrack(); got != 0 {
+		t.Fatalf("current track %d, want 0", got)
+	}
+	if m.ListSelection == nil {
+		t.Fatal("ListSelection is nil: the model must hold the app's pointer")
+	}
+	if *m.ListSelection != 0 {
+		t.Fatalf("the list's choice is %d, want the playing track 0", *m.ListSelection)
+	}
+	f0, _ := m.List.Visible()
+	if f0 > 2 {
+		t.Fatalf("list starts away from the top: first=%d", f0)
 	}
 
-	// The user scrolls away while the music plays. ScrollIntoView is the
-	// documented programmatic scroll; it writes through the same window
-	// the wheel moves, without touching the player.
+	// --- 2. Auto-advance to track 1, as OnEnd does when a song ends.
+	p.JumpTo(1)
+	tester.Advance(50 * time.Millisecond)
+	tester.Frame()
+	tester.Frame()
+
+	if got := *m.ListSelection; got != 1 {
+		t.Fatalf("after auto-advance the list's choice is %d, want the playing track 1", got)
+	}
+	f1, _ := m.List.Visible()
+	if f1 > 3 {
+		t.Fatalf("after auto-advance the list shows first=%d, want the top rows", f1)
+	}
+
+	// --- 3. The user scrolls away mid-song and stays. Frames pass while
+	// the music plays; the view must not drag the list back.
 	m.List.ScrollIntoView(40)
+	tester.Advance(50 * time.Millisecond)
 	tester.Frame()
 	tester.Frame()
 
@@ -106,78 +140,33 @@ func TestQueueScreenScrollsWhilePlaying(t *testing.T) {
 	if away < 30 {
 		t.Fatalf("scroll away did not stick: first=%d", away)
 	}
-
-	// Frames pass, the song still plays: the list must stay where the
-	// user put it. Before the fix the follow re-fired every frame here.
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 8; i++ {
 		tester.Advance(50 * time.Millisecond)
 		tester.Frame()
 	}
 	still, _ := m.List.Visible()
 	if still != away {
-		t.Fatalf("the list drifted back while playing: %d -> %d", away, still)
+		t.Fatalf("the list drifted while the song played: %d -> %d", away, still)
+	}
+	// The choice still names the playing track, not the row scrolled to.
+	if got := *m.ListSelection; got != 1 {
+		t.Fatalf("scrolling moved the choice to %d, want the playing track 1", got)
 	}
 
-	// Then the song changes: the follow chases again. That is the whole
-	// behaviour: free while the song lasts, following on a change.
+	// --- 4. The song changes: the list chases.
 	p.JumpTo(len(tr) - 1)
+	tester.Advance(50 * time.Millisecond)
 	tester.Frame()
 	tester.Frame()
+
+	if got := *m.ListSelection; got != len(tr)-1 {
+		t.Fatalf("after the jump the list's choice is %d, want %d", got, len(tr)-1)
+	}
 	f, _ := m.List.Visible()
 	if f < len(tr)-4 {
 		t.Fatalf("the list did not follow the new song: first=%d, want near %d", f, len(tr)-1)
 	}
-	t.Logf("scroll away held at %d across 5 frames, then followed to %d", still, f)
-}
-
-// TestQueueScreenFollowsPlaying proves the list follows the song: jump to
-// the last track through the player and the list scrolls it into view on
-// its own, without a wheel or a programmatic ScrollIntoView from the test.
-func TestQueueScreenFollowsPlaying(t *testing.T) {
-	tester, p, m := queueScreenTester(t)
-
-	tr := p.Tracks()
-	if len(tr) < 12 {
-		t.Skip("need a dozen tracks to see the window move")
-	}
-	if m.List == nil {
-		t.Fatal("model has no ListState")
-	}
-
-	// A few frames with track 0 playing: the window must sit at the top.
-	tester.Frame()
-	first, _ := m.List.Visible()
-	if first > 2 {
-		t.Fatalf("list starts away from the top: first=%d", first)
-	}
-
-	// The player jumps to the last song, as if auto-advance ran the queue.
-	p.JumpTo(len(tr) - 1)
-
-	// The name the meta line shows must be the new song.
-	st := p.State()
-	if st.Title != tr[len(tr)-1].Title {
-		t.Fatalf("playing %q, want the last track %q", st.Title, tr[len(tr)-1].Title)
-	}
-
-	// Build frames: the view must scroll the list to the playing row.
-	tester.Advance(100 * time.Millisecond)
-	tester.Frame()
-	tester.Frame()
-
-	f, l := m.List.Visible()
-	if f < len(tr)-4 {
-		t.Fatalf("the list did not follow the playing song: visible %d..%d, want near %d",
-			f, l, len(tr)-1)
-	}
-	name := tr[f].Title
-	if tr[f].Artist != "" {
-		name = tr[f].Title + " — " + tr[f].Artist
-	}
-	if _, ok := tester.Find(name); !ok {
-		t.Fatalf("followed row %d (%q) not laid out", f, name)
-	}
-	t.Logf("followed to %d..%d, top row %q", f, l, name)
+	t.Logf("lifecycle ok: 0 -> 1 follow, scroll away held at %d over 8 frames, then chased to %d", still, f)
 }
 
 // TestQueueScreenScrolls proves the virtual list moves through the queue:
