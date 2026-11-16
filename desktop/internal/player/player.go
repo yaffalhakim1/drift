@@ -68,14 +68,11 @@ type Player struct {
 	queue   []string
 	tracks  []Track
 	current int
-
-	// The host folder for the remembered path, set once at startup.
-	configPath string
 }
 
-// New returns a player with a remembered-path file at configPath.
-func New(configPath string) *Player {
-	return &Player{volume: 0.8, configPath: configPath}
+// New returns a player, silent until a file is opened.
+func New() *Player {
+	return &Player{volume: 0.8}
 }
 
 // OnChange registers the function called whenever the visible state changes,
@@ -93,39 +90,6 @@ func (p *Player) changed() {
 	if fn != nil {
 		fn()
 	}
-}
-
-// RememberedPath returns the path saved from a previous run, or "".
-func (p *Player) RememberedPath() string {
-	if p.configPath == "" {
-		return ""
-	}
-	b, err := os.ReadFile(p.configPath)
-	if err != nil {
-		return ""
-	}
-	path := strings.TrimSpace(string(b))
-	if path == "" {
-		return ""
-	}
-	if _, err := os.Stat(path); err != nil {
-		return ""
-	}
-	return path
-}
-
-func (p *Player) remember(path string) {
-	if p.configPath == "" {
-		return
-	}
-	_ = os.MkdirAll(filepath.Dir(p.configPath), 0o755)
-	_ = os.WriteFile(p.configPath, []byte(path), 0o644)
-}
-
-// Forget clears the remembered path. Choosing a folder clears the old
-// single-recording memory, so exactly one source wins at startup.
-func (p *Player) Forget() {
-	p.remember("")
 }
 
 // supported rejects the formats the decoder cannot read, with the reason,
@@ -281,7 +245,6 @@ func (p *Player) Open(path string) error {
 	stream.SetVolume(p.volume)
 	p.mu.Unlock()
 
-	p.remember(path)
 	p.changed()
 	return nil
 }
@@ -307,7 +270,6 @@ func (p *Player) OpenQueue(paths []string) error {
 	p.current = 0
 	p.mu.Unlock()
 
-	p.remember("")
 	p.changed()
 	return nil
 }
@@ -604,4 +566,72 @@ func (p *Player) State() State {
 		st.Chapter = mix.IndexAt(pos)
 	}
 	return st
+}
+
+// Session is where playback is, so the next run picks it up.
+type Session struct {
+	// Kind is "recording" for one long file, or "folder" for a queue.
+	Kind string `json:"kind"`
+	// Path is the recording's file or the folder of songs.
+	Path string `json:"path"`
+	// Index is the song playing in a folder; 0 for a recording.
+	Index int `json:"index"`
+	// Position is how far into the current file, in milliseconds.
+	Position int64 `json:"position"`
+}
+
+// Session reports where playback is, or false when nothing is loaded. A
+// folder session names the folder, not the files, so the queue is rebuilt
+// from what the folder holds now.
+func (p *Player) Session() (Session, bool) {
+	p.mu.Lock()
+	stream, queue, path, current := p.stream, len(p.queue) > 0, p.path, p.current
+	var dir string
+	if queue {
+		dir = filepath.Dir(p.queue[0])
+	}
+	p.mu.Unlock()
+
+	if stream == nil {
+		return Session{}, false
+	}
+	s := Session{Position: stream.Position().Milliseconds()}
+	if queue {
+		s.Kind, s.Path, s.Index = "folder", dir, current
+	} else {
+		s.Kind, s.Path = "recording", path
+	}
+	return s, true
+}
+
+// Restore opens what the session says, paused, and puts the file back where
+// it was. A folder or file that has gone returns its error, so the caller
+// can start empty instead.
+func (p *Player) Restore(s Session) error {
+	switch s.Kind {
+	case "folder":
+		files, err := FolderTracks(s.Path)
+		if err != nil {
+			return err
+		}
+		if err := p.OpenQueue(files); err != nil {
+			return err
+		}
+		// The queue opens on its first song; move to the one that played.
+		if s.Index > 0 && s.Index < len(files) {
+			if err := p.openIndex(s.Index); err != nil {
+				return err
+			}
+		}
+	case "recording":
+		if err := p.Open(s.Path); err != nil {
+			return err
+		}
+	default:
+		return ErrNoFile
+	}
+	if s.Position > 0 {
+		p.Seek(time.Duration(s.Position) * time.Millisecond)
+	}
+	return nil
 }

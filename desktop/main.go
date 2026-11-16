@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -9,12 +11,12 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
+	"drift/internal/mix"
 	"drift/internal/player"
 	"drift/internal/view"
 )
@@ -39,10 +41,15 @@ type app struct {
 	// theme is "system", "light" or "dark", as the user last chose.
 	theme string
 
-	// settingsPath is where the theme is remembered.
-	// folderPath remembers the chosen folder of songs.
+	// settingsPath is where the theme is remembered, and sessionPath where
+	// playback is, so the next run picks it up.
 	settingsPath string
-	folderPath   string
+	sessionPath  string
+	savedSession string
+
+	// npKey is the track the system's media controls last showed, so a
+	// seek or a pause updates it instead of publishing it again.
+	npKey string
 }
 
 // model is the state the screen renders from, rebuilt each frame because
@@ -132,11 +139,9 @@ func (a *app) choose() {
 		return
 	}
 	a.player.Play()
-	a.player.Forget() // one source wins: the recording, not an old folder
-	// Clear the folder memory too, on disk: a stale last-folder would
-	// otherwise come back over this recording on the next launch.
-	a.folderPath = ""
-	a.saveFolder()
+	// One source wins: the recording replaces any folder, in memory and in
+	// the session the next run reads.
+	a.saveSession()
 }
 
 // chooseFolder asks for a folder of songs and plays it in order.
@@ -159,11 +164,12 @@ func (a *app) chooseFolder() {
 		mygo.Dialog.Error("Cannot play that folder", err.Error())
 		return
 	}
-	a.folderPath = dir
-	a.saveFolder()
+	// The dialog's button says "Play this folder", so it plays.
+	a.player.Play()
+	a.saveSession()
 }
 
-// saveSettings remembers the theme beside the recording path.
+// saveSettings remembers the theme beside the session.
 func (a *app) saveSettings() {
 	if a.settingsPath == "" {
 		return
@@ -172,32 +178,45 @@ func (a *app) saveSettings() {
 	_ = os.WriteFile(a.settingsPath, []byte(a.theme+"\n"), 0o644)
 }
 
-// saveFolder remembers the folder of songs for the next run.
-func (a *app) saveFolder() {
-	if a.settingsPath == "" {
+// saveSession writes where playback is, so the next run picks it up. It
+// writes a part file and renames it, so a crash mid-write leaves the old
+// session rather than half of a new one.
+func (a *app) saveSession() {
+	if a.sessionPath == "" || a.player == nil {
 		return
 	}
-	_ = os.WriteFile(filepath.Join(filepath.Dir(a.settingsPath), "last-folder"), []byte(a.folderPath+"\n"), 0o644)
+	s, ok := a.player.Session()
+	if !ok {
+		return
+	}
+	b, err := json.Marshal(s)
+	if err != nil || string(b) == a.savedSession {
+		return
+	}
+	_ = os.MkdirAll(filepath.Dir(a.sessionPath), 0o755)
+	if os.WriteFile(a.sessionPath+".part", b, 0o644) == nil &&
+		os.Rename(a.sessionPath+".part", a.sessionPath) == nil {
+		a.savedSession = string(b)
+	}
 }
 
-// loadFolder reads the folder chosen last time. A folder that went away,
-// or that now has no songs, is dropped rather than offered.
-func (a *app) loadFolder() string {
-	if a.settingsPath == "" {
-		return ""
+// restoreSession opens what played last time, paused. A file or folder that
+// has gone is dropped, and the popup starts empty.
+func (a *app) restoreSession() {
+	if a.sessionPath == "" {
+		return
 	}
-	b, err := os.ReadFile(filepath.Join(filepath.Dir(a.settingsPath), "last-folder"))
+	b, err := os.ReadFile(a.sessionPath)
 	if err != nil {
-		return ""
+		return
 	}
-	dir := strings.TrimSpace(string(b))
-	if dir == "" {
-		return ""
+	var s player.Session
+	if json.Unmarshal(b, &s) != nil {
+		return
 	}
-	if files, err := player.FolderTracks(dir); err != nil || len(files) == 0 {
-		return ""
+	if err := a.player.Restore(s); err != nil {
+		log.Println("session from last time could not be opened:", err)
 	}
-	return dir
 }
 
 // loadSettings reads the theme chosen last time, defaulting to the system.
@@ -216,39 +235,23 @@ func (a *app) loadSettings() {
 	}
 }
 
-// ready builds the tray, loads what played last time, and wires the menu.
+// ready builds the tray, picks up what played last time, and wires the menu.
 // It runs once the app is up.
 func (a *app) ready() {
 	dataDir, err := mygo.App.Path(mygo.PathUserData)
-	var lastPath string
 	if err == nil {
-		lastPath = filepath.Join(dataDir, "last-recording")
 		a.settingsPath = filepath.Join(dataDir, "settings")
+		a.sessionPath = filepath.Join(dataDir, "session.json")
 	}
 	a.loadSettings()
-
-	// One source wins: a remembered folder beats a remembered recording.
-	folder := a.loadFolder()
-	a.folderPath = folder
-	a.player = player.New(lastPath)
+	a.player = player.New()
 
 	// Apply the saved appearance before anything draws.
 	a.setTheme(a.theme)
 
-	if folder != "" {
-		files, err := player.FolderTracks(folder)
-		if err == nil {
-			if err := a.player.OpenQueue(files); err != nil {
-				log.Println("folder from last time could not be opened:", err)
-			}
-		}
-	} else if p := a.player.RememberedPath(); p != "" {
-		// Open the recording from the previous run, so the popup has
-		// something to show the first time it opens.
-		if err := a.player.Open(p); err != nil {
-			log.Println("recording from last time could not be opened:", err)
-		}
-	}
+	// Pick up where playback was left, paused, and show it to the system.
+	a.restoreSession()
+	a.wireNowPlaying()
 
 	tray, err := mygo.NewTray(mygo.TrayOptions{
 		Icon:           trayIcon(),
@@ -286,10 +289,114 @@ func (a *app) ready() {
 		})
 	}
 
+	// A second launch opens the popup of the one already running.
+	mygo.App.OnSecondInstance(func([]string, string) {
+		if a.panel == nil {
+			a.toggle()
+		}
+	})
+
+	// Once a second, keep the system's media controls on the chapter that
+	// plays, and every tenth second keep the session, in case the app does
+	// not get to quit. RunOnMain keeps both on the thread the rest of the
+	// app state lives on.
+	go func() {
+		t := time.NewTicker(time.Second)
+		n := 0
+		for range t.C {
+			n++
+			save := n%10 == 0
+			mygo.RunOnMain(func() {
+				// A new chapter is a new title; the system advances the
+				// position itself, so nothing else is due each second.
+				if st := a.player.State(); st.Playing && nowPlayingKey(st) != a.npKey {
+					a.syncNowPlaying()
+				}
+				if save {
+					a.saveSession()
+				}
+			})
+		}
+	}()
+
+	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) {
+		a.saveSession()
+	})
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
 		a.player.Close()
 		tray.Destroy()
 	})
+}
+
+// wireNowPlaying shows what plays in the system's media controls and takes
+// the media keys, through MyGo's NowPlaying: the volume flyout and the lock
+// screen on Windows, Control Center on macOS, MPRIS on Linux.
+func (a *app) wireNowPlaying() {
+	mygo.NowPlaying.OnCommand(func(cmd mygo.MediaCommand, pos time.Duration) {
+		switch cmd {
+		case mygo.MediaPlay, mygo.MediaPause:
+			if (cmd == mygo.MediaPlay) != a.player.State().Playing {
+				a.player.Toggle()
+			}
+		case mygo.MediaNext:
+			a.player.Next()
+		case mygo.MediaPrevious:
+			a.player.Prev()
+		case mygo.MediaSeek:
+			a.player.Seek(pos)
+		}
+		a.syncNowPlaying()
+	})
+	// The player changes on its own goroutine; the system's controls are
+	// updated on the main thread, as the rest of the app state is.
+	a.player.OnChange(func() { mygo.RunOnMain(a.syncNowPlaying) })
+	a.syncNowPlaying()
+}
+
+// nowPlayingKey is what the system shows: the file, and the chapter in a
+// recording, so a new chapter is a new title.
+func nowPlayingKey(st player.State) string {
+	if !st.Queue && st.Chapter >= 0 && st.Chapter < len(mix.Chapters) {
+		return fmt.Sprintf("%s#%d", st.Path, st.Chapter)
+	}
+	return st.Path
+}
+
+// syncNowPlaying publishes the current track to the system. A new track is
+// set whole; a seek or a pause only moves the state and the position, so
+// the system is not handed the same title again on every change.
+func (a *app) syncNowPlaying() {
+	st := a.player.State()
+	if !st.Loaded {
+		if a.npKey != "" {
+			mygo.NowPlaying.Clear()
+			a.npKey = ""
+		}
+		return
+	}
+
+	state := mygo.PlaybackPaused
+	if st.Playing {
+		state = mygo.PlaybackPlaying
+	}
+	if key := nowPlayingKey(st); key != a.npKey {
+		a.npKey = key
+		title, artist := st.Title, st.Artist
+		if !st.Queue && st.Chapter >= 0 && st.Chapter < len(mix.Chapters) {
+			ch := mix.Chapters[st.Chapter]
+			title, artist = ch.Name(), ch.Artist
+		}
+		mygo.NowPlaying.Set(mygo.NowPlayingInfo{
+			Title:    title,
+			Artist:   artist,
+			Duration: st.Total,
+			Position: st.Position,
+			State:    state,
+			Commands: mygo.MediaPlay | mygo.MediaPause | mygo.MediaNext | mygo.MediaPrevious | mygo.MediaSeek,
+		})
+		return
+	}
+	mygo.NowPlaying.SetPlayback(state, st.Position)
 }
 
 // trayIcon draws the tray glyph: a record, black on transparent so macOS can
@@ -326,6 +433,11 @@ func trayIcon() []byte {
 }
 
 func main() {
+	// A second launch opens the running app's popup instead of starting a
+	// second tray icon. Asked before anything else touches the data.
+	if !mygo.App.RequestSingleInstanceLock() {
+		return
+	}
 	a := &app{}
 
 	mygo.App.SetName("drift")

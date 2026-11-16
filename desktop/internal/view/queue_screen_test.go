@@ -24,7 +24,7 @@ func queueScreenTester(t *testing.T) (*ui.Tester, *player.Player, *Model) {
 		t.Fatalf("FolderTracks: %v", err)
 	}
 
-	p := player.New("")
+	p := player.New()
 	if err := p.OpenQueue(paths); err != nil {
 		t.Fatalf("OpenQueue: %v", err)
 	}

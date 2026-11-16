@@ -18,7 +18,7 @@ func newScreenTester(t *testing.T) (*ui.Tester, *ui.ScrollState, *Model) {
 	var p *player.Player
 	if path := os.Getenv("DRIFT_MIX"); path != "" {
 		if _, err := os.Stat(path); err == nil {
-			p = player.New("")
+			p = player.New()
 			if err := p.Open(path); err != nil {
 				t.Fatalf("Open: %v", err)
 			}

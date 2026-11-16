@@ -119,7 +119,7 @@ func TestQueueOpenAndJump(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := New("")
+	p := New()
 	defer p.Close()
 	if err := p.OpenQueue(paths); err != nil {
 		t.Fatalf("OpenQueue: %v", err)
@@ -180,7 +180,7 @@ func TestQueueRealFolder(t *testing.T) {
 		t.Fatalf("only %d tracks in %s", len(paths), dir)
 	}
 
-	p := New("")
+	p := New()
 	defer p.Close()
 	if err := p.OpenQueue(paths); err != nil {
 		t.Fatalf("OpenQueue: %v", err)

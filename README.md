@@ -36,7 +36,7 @@ It does not ship audio. The recording belongs to the artists in it.
 
 ## Install
 
-Download `drift-setup-0.1.0-amd64.exe` from the releases page and run it.
+Download `drift-setup-0.2.1-amd64.exe` from the releases page and run it.
 
 The app starts in the tray. It shows no window until you click the icon.
 
@@ -68,15 +68,17 @@ Inside the popup:
 
 | Key | Action |
 | --- | --- |
-| Space | play or pause |
-| Left, Right | seek five seconds |
-| Shift + Left, Right | previous or next chapter |
 | Escape | close the popup |
+| Space, Enter | press the focused control |
+| Left, Right | move the focused seek bar or appearance switch |
+
+The media keys of your keyboard and headset play, pause, skip and seek, and
+Windows shows the track in its media controls.
 
 Drag the seek bar to move through the mix. Click any chapter to play it.
 
 The three marks at the top right pick the appearance: follow Windows, light, or
-dark. The app remembers your choice.
+dark. The app remembers your choice, and where you were in the mix.
 
 ## How it works
 
@@ -100,6 +102,10 @@ the popup destroys the window and leaves the playback untouched.
 **The recording streams.** A 61 minute stereo file would take 1.2 GB as float
 samples in memory. `audio.OpenStream` decodes it as it plays and seeks inside
 the file, so memory stays flat.
+
+**The session is kept.** `session.json` in the user data directory records the
+file or folder and the position. It is written every ten seconds while playing
+and on quit, and read on launch, paused.
 
 **The record is drawn, not loaded.** A painter draws the disc, its grooves, the
 label and the progress ring every frame. The disc turns and the label print

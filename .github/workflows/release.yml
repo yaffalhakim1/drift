@@ -1,0 +1,40 @@
+# Pushing a tag such as v0.2.0 builds the Windows installer and uploads it to
+# a draft release of the tag, which is published by hand.
+#
+# The installer is NOT signed yet. Windows SmartScreen warns on an unsigned
+# installer, so a public release needs a code-signing certificate and a step
+# that signs dist/windows-amd64/*.exe before the upload. Until then, this
+# workflow is for your own builds.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: desktop/go.mod
+          cache: false
+      - name: Build the installer
+        run: go tool mygo build
+      - name: Upload to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG" > /dev/null 2>&1 || \
+            gh release create "$TAG" --draft --generate-notes
+          gh release upload "$TAG" dist/windows-amd64/*.exe --clobber

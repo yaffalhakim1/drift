@@ -20,7 +20,7 @@ func TestStreamRealRecording(t *testing.T) {
 		t.Skipf("recording not found: %v", err)
 	}
 
-	p := New("")
+	p := New()
 	if err := p.Open(path); err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -58,4 +58,53 @@ func TestStreamRealRecording(t *testing.T) {
 		t.Fatalf("chapter after seek = %d, want 17", st.Chapter)
 	}
 	t.Logf("seek to %v landed at %v, chapter %d", target, st.Position.Round(time.Second), st.Chapter)
+}
+
+// TestSessionRestoreRealRecording proves a session puts a real recording back
+// where it was, not just at the start. It runs against the user's own file
+// when DRIFT_MIX points at it.
+func TestSessionRestoreRealRecording(t *testing.T) {
+	path := os.Getenv("DRIFT_MIX")
+	if path == "" {
+		t.Skip("set DRIFT_MIX to the recording to run this")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Skipf("recording not found: %v", err)
+	}
+
+	p := New()
+	if err := p.Open(path); err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	const target = 30 * time.Second
+	p.Seek(target)
+	waitFor(t, p, target)
+	s, ok := p.Session()
+	if !ok {
+		t.Fatal("Session() reported nothing loaded")
+	}
+	p.Close()
+
+	q := New()
+	defer q.Close()
+	if err := q.Restore(s); err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+	waitFor(t, q, target)
+	if st := q.State(); st.Position < target-2*time.Second || st.Position > target+2*time.Second {
+		t.Fatalf("restored position = %v, want about %v", st.Position, target)
+	}
+}
+
+// waitFor waits until the decoder lands within two seconds of target.
+func waitFor(t *testing.T, p *Player, target time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if d := p.State().Position - target; d > -2*time.Second && d < 2*time.Second {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("position never reached %v", target)
 }

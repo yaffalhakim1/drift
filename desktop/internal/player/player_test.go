@@ -1,7 +1,6 @@
 package player
 
 import (
-	"os"
 	"testing"
 	"time"
 
@@ -36,7 +35,7 @@ func TestSupportedFormats(t *testing.T) {
 // TestOpenRejectsUnreadable makes sure a bad path fails loudly instead of
 // leaving an empty player that looks like a paused one.
 func TestOpenRejectsUnreadable(t *testing.T) {
-	p := New("")
+	p := New()
 	if err := p.Open(""); err != ErrNoFile {
 		t.Fatalf("Open(\"\") = %v, want ErrNoFile", err)
 	}
@@ -45,35 +44,6 @@ func TestOpenRejectsUnreadable(t *testing.T) {
 	}
 	if st := p.State(); st.Loaded {
 		t.Fatal("State reports Loaded after a failed Open")
-	}
-}
-
-// TestRememberedPathOnlyReturnsRealFiles stops the popup from opening on a
-// path the user moved or deleted.
-func TestRememberedPathOnlyReturnsRealFiles(t *testing.T) {
-	dir := t.TempDir()
-	cfg := dir + "/last"
-
-	p := New(cfg)
-	if got := p.RememberedPath(); got != "" {
-		t.Fatalf("RememberedPath() = %q on a fresh player, want empty", got)
-	}
-
-	real := dir + "/mix.mp3"
-	if err := os.WriteFile(real, []byte("not really an mp3"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	p.remember(real)
-	if got := p.RememberedPath(); got != real {
-		t.Fatalf("RememberedPath() = %q, want %q", got, real)
-	}
-
-	// A file that went away must not be offered again.
-	if err := os.Remove(real); err != nil {
-		t.Fatal(err)
-	}
-	if got := p.RememberedPath(); got != "" {
-		t.Fatalf("RememberedPath() = %q after the file was deleted, want empty", got)
 	}
 }
 
