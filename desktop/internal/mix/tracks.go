@@ -62,6 +62,19 @@ var Chapters = []Chapter{
 	{3486 * time.Second, "Mondo Loops", "Lunar Drive"},
 }
 
+// IsMix reports whether a recording of this length is the one the chapters
+// belong to. The offsets were measured against one 61-minute file; another
+// file, such as an eight-hour one, has no chapters to show.
+func IsMix(total time.Duration) bool {
+	if total <= 0 {
+		return false
+	}
+	return (total - Total).Abs() <= 5*time.Second
+}
+
+// Total is the length of the recording the chapters were measured against.
+const Total = 3674 * time.Second
+
 // IndexAt returns the chapter that is playing at d.
 func IndexAt(d time.Duration) int {
 	lo, hi := 0, len(Chapters)-1

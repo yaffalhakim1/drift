@@ -3,6 +3,8 @@ package view
 import (
 	"fmt"
 	"math"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -188,8 +190,11 @@ func plateSection(c *ui.Context, m *Model, st player.State) {
 	el := ui.Box(c).Width(148).Height(148).AlignSelf(ui.Center).MarginY(10)
 
 	title := queueTitle(st)
-	if !st.Queue && st.Chapter >= 0 && st.Chapter < len(mix.Chapters) {
-		title = mix.Chapters[st.Chapter].Name()
+	if !st.Queue {
+		title = recordingTitle(st)
+		if isMix(st) && st.Chapter >= 0 && st.Chapter < len(mix.Chapters) {
+			title = mix.Chapters[st.Chapter].Name()
+		}
 	}
 	pal := PaletteFor(c.Theme())
 
@@ -212,12 +217,33 @@ func queueTitle(st player.State) string {
 	return "Nothing playing"
 }
 
+// isMix reports whether the loaded recording is the one the chapter offsets
+// were measured against. Another long file plays whole: its own name is the
+// title, and the list has one entry, not twenty-eight that do not line up.
+func isMix(st player.State) bool {
+	return !st.Queue && mix.IsMix(st.Total)
+}
+
+// recordingTitle is a recording's own name, without its extension.
+func recordingTitle(st player.State) string {
+	if st.Path == "" {
+		return "Nothing playing"
+	}
+	name := filepath.Base(st.Path)
+	return strings.TrimSuffix(name, filepath.Ext(name))
+}
+
 // trackMeta is the chapter title and its artist.
 func trackMeta(c *ui.Context, t *ui.Theme, st player.State) {
-	title, artist := queueTitle(st), st.Artist
-	if !st.Queue {
+	var title, artist string
+	switch {
+	case st.Queue:
+		title, artist = queueTitle(st), st.Artist
+	case isMix(st) && st.Chapter >= 0 && st.Chapter < len(mix.Chapters):
 		ch := mix.Chapters[st.Chapter]
 		title, artist = ch.Name(), ch.Artist
+	default:
+		title = recordingTitle(st)
 	}
 
 	ui.Column(c).Gap(2).Children(func() {
@@ -290,6 +316,10 @@ func chapterList(c *ui.Context, t *ui.Theme, m *Model, st player.State) {
 		queueList(c, t, m, st)
 		return
 	}
+	if !isMix(st) {
+		singleRecording(c, t, st)
+		return
+	}
 
 	list := ui.Scroll(c).Width(288).Height(scrollHeight(c))
 	list.TrackScroll(m.Scroll)
@@ -298,6 +328,15 @@ func chapterList(c *ui.Context, t *ui.Theme, m *Model, st player.State) {
 		for i := range mix.Chapters {
 			chapterRow(c, t, m, st, i)
 		}
+	})
+}
+
+// singleRecording is the list for a recording with no chapters: its own name
+// and length, in place of the twenty-eight that belong to another file.
+func singleRecording(c *ui.Context, t *ui.Theme, st player.State) {
+	ui.Column(c).Width(288).Height(scrollHeight(c)).Gap(6).Padding(8, 12).Children(func() {
+		ui.Text(c, recordingTitle(st)).FontSize(12.5).MaxLines(2).TextColor(t.Text)
+		ui.Text(c, "One recording · "+Clock(st.Total)).FontSize(10).TextColor(t.TextMuted)
 	})
 }
 

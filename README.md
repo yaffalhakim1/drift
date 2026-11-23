@@ -16,6 +16,10 @@ It streams one continuous recording from your disk and cuts it into chapters.
 Twenty-eight markers sit at the timestamps of the tracklist, so the title
 follows the music as the mix moves from song to song.
 
+Those twenty-eight markers belong to the 61-minute mix they were measured
+against. Another recording, such as an eight-hour one, plays whole: the popup
+shows its own name and one row, not a tracklist that does not line up.
+
 The popup is 320 by 585 pixels. That is the size of the panels Windows already
 shows from the tray, and I kept to it.
 
