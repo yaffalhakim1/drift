@@ -2,11 +2,9 @@ package main
 
 import (
 	"bytes"
+	_ "embed"
 	"encoding/json"
 	"fmt"
-	"image"
-	"image/color"
-	"image/png"
 	"log"
 	"os"
 	"path/filepath"
@@ -20,6 +18,13 @@ import (
 	"drift/internal/player"
 	"drift/internal/view"
 )
+
+// trayIcon is MyGo's default app icon: the blue-violet mark with a ring that
+// the installer wears too, at 32 px for the notification area. It is not a
+// template image, so neither macOS nor Windows tints it.
+//
+//go:embed resources/tray.png
+var trayIcon []byte
 
 // app holds the state the tray and the popup share. Everything here is read
 // and written on the main thread, by tray callbacks and the view.
@@ -254,8 +259,8 @@ func (a *app) ready() {
 	a.wireNowPlaying()
 
 	tray, err := mygo.NewTray(mygo.TrayOptions{
-		Icon:           trayIcon(),
-		IconIsTemplate: runtime.GOOS == "darwin",
+		Icon:           trayIcon,
+		IconIsTemplate: false,
 		ToolTip:        "drift",
 	})
 	if err != nil {
@@ -397,39 +402,6 @@ func (a *app) syncNowPlaying() {
 		return
 	}
 	mygo.NowPlaying.SetPlayback(state, st.Position)
-}
-
-// trayIcon draws the tray glyph: a record, black on transparent so macOS can
-// tint it for a light or dark menu bar.
-func trayIcon() []byte {
-	const size = 32
-	img := image.NewNRGBA(image.Rect(0, 0, size, size))
-	ink := color.NRGBA{A: 255}
-	if runtime.GOOS != "darwin" {
-		ink = color.NRGBA{R: 0x1b, G: 0x18, B: 0x14, A: 255}
-	}
-
-	cx, cy := float64(size)/2, float64(size)/2
-	for y := 0; y < size; y++ {
-		for x := 0; x < size; x++ {
-			dx, dy := float64(x)+0.5-cx, float64(y)+0.5-cy
-			d := (dx*dx + dy*dy)
-			// A filled disc with a punched-out centre: the shape of a record.
-			switch {
-			case d <= 13*13 && d >= 4*4:
-				img.Set(x, y, ink)
-			case d < 1.6*1.6:
-				img.Set(x, y, ink)
-			}
-		}
-	}
-
-	var b bytes.Buffer
-	if err := png.Encode(&b, img); err != nil {
-		log.Println("tray icon:", err)
-		return nil
-	}
-	return b.Bytes()
 }
 
 func main() {
