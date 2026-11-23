@@ -59,9 +59,12 @@ func TestNonMixRecordingShowsItsName(t *testing.T) {
 }
 
 // TestRecordingTitle pins the name a recording shows: its file name without
-// the extension, and a placeholder when nothing is loaded.
+// the extension, and a placeholder when nothing is loaded. The path is built
+// with filepath.Join so the test holds on Windows and on Linux, where a
+// backslash is part of a name rather than a separator.
 func TestRecordingTitle(t *testing.T) {
-	if got := recordingTitle(player.State{Path: `C:\music\brown noise.mp3`}); got != "brown noise" {
+	path := filepath.Join("music", "brown noise.mp3")
+	if got := recordingTitle(player.State{Path: path}); got != "brown noise" {
 		t.Errorf("recordingTitle = %q, want %q", got, "brown noise")
 	}
 	if got := recordingTitle(player.State{}); got != "Nothing playing" {
